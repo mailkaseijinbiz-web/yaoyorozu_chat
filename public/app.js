@@ -524,13 +524,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // 凝視ゲージ (3秒で自動注入)
   // ==========================================
 
-  const installingSound = new Audio('soul_installing.mp3'); // 認識中の音 (認識開始と同時に再生)
-
   function startGaze() {
     if (gazeStartTime !== null) return;
     gazeStartTime = Date.now();
-    installingSound.currentTime = 0;
-    installingSound.play().catch(() => {});
     updateScanLine();
 
     gazeInterval = setInterval(() => {
@@ -552,10 +548,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gazeInterval) {
       clearInterval(gazeInterval);
       gazeInterval = null;
-    }
-    if (!installingSound.paused) {
-      installingSound.pause();
-      installingSound.currentTime = 0;
     }
     updateScanLine();
   }
@@ -606,8 +598,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // 魂の注入 → 召喚 (登録数無制限)
   // ==========================================
 
-  const infusionSound = new Audio('install_soul.mp3');
-
   async function triggerSoulInfusion() {
     if (!detectedTarget) {
       resetGaze();
@@ -626,10 +616,6 @@ document.addEventListener('DOMContentLoaded', () => {
     flashOverlay.classList.remove('flash');
     void flashOverlay.offsetWidth;
     flashOverlay.classList.add('flash');
-
-    // 注入効果音 (初回タップ前のiOSではブロックされる場合があるが無視)
-    infusionSound.currentTime = 0;
-    infusionSound.play().catch(() => {});
 
     try {
       const fullImg = await loadImage(snapshotCanvas.toDataURL('image/jpeg'));
@@ -763,10 +749,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function buildScene() {
     const maxTrack = Math.min(spirits.length, 3);
+    // リングは「今しゃべっている1体」だけに表示してマーカーが複数並ばないようにする
     const targetsHTML = spirits.map((s, i) => `
       <a-entity mindar-image-target="targetIndex: ${i}" id="target-entity-${i}">
-        <a-ring color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
-                material="shader: flat; transparent: true; opacity: 0.85"></a-ring>
+        <a-ring id="ring-${i}" color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
+                material="shader: flat; transparent: true; opacity: 0.85" visible="false"></a-ring>
         <a-plane id="bubble-plane-${i}" position="0 0.85 0.1" width="1.6" height="0.8" billboard
                  material="shader: flat; transparent: true;" visible="false" scale="0 0 0"></a-plane>
       </a-entity>`).join('');
@@ -791,6 +778,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       el.addEventListener('targetLost', () => {
         visibleTargets.delete(i);
+        // 画面外に出たら会話・マーカーを止める
+        hideSpeechBubble(i);
         if (visibleTargets.size === 0) scanStatus.textContent = '';
       });
     });
@@ -825,16 +814,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!banterAudio) banterAudio = new Audio();
     banterAudio.src = SILENT_WAV;
     banterAudio.play().then(() => hideToast()).catch(() => {});
-    // 効果音もタップ起点でアンロックしておく (iOS対策)
-    [infusionSound, installingSound].forEach(sfx => {
-      if (!sfx.paused) return;
-      sfx.muted = true;
-      sfx.play().then(() => {
-        sfx.pause();
-        sfx.currentTime = 0;
-        sfx.muted = false;
-      }).catch(() => { sfx.muted = false; });
-    });
     audioUnlocked = true;
   });
 
@@ -898,15 +877,18 @@ document.addEventListener('DOMContentLoaded', () => {
   let pendingTurn = null;
   let newcomerToAnnounce = null;
 
-  function speakerIndex(nextSpeaker) {
-    const idx = parseInt(String(nextSpeaker).replace('agent', ''), 10);
-    return Number.isInteger(idx) && idx >= 0 && idx < spirits.length ? idx : 0;
+  // 現在トラッキング中（画面に映っている）精霊のグローバルindex一覧
+  function visibleSpiritIndices() {
+    return [...visibleTargets].filter(i => i >= 0 && i < spirits.length).sort((a, b) => a - b);
   }
 
-  // 次のターンのセリフ生成とTTS音声取得をまとめて先読みする
-  function prefetchTurn() {
+  // 指定した参加者(グローバルindex配列)だけでセリフ生成とTTS音声取得を先読みする。
+  // nextSpeaker は参加者配列内のローカルindex(agent0..)なのでグローバルindexへ写し戻す。
+  function fetchTurn(participants) {
     const body = JSON.stringify({
-      spirits: spirits.map(s => ({ name: s.name, vessel: s.vessel, personality: s.personality })),
+      spirits: participants.map(i => ({
+        name: spirits[i].name, vessel: spirits[i].vessel, personality: spirits[i].personality
+      })),
       history: banterHistory,
       newcomer: newcomerToAnnounce
     });
@@ -920,11 +902,12 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(r => r.json())
       .then(data => {
         if (data.error || !data.reply) return { data };
-        const idx = speakerIndex(data.nextSpeaker);
-        const audioP = fetch(ttsUrl(idx, data.reply))
+        const local = parseInt(String(data.nextSpeaker).replace('agent', ''), 10);
+        const globalIdx = participants[Number.isInteger(local) ? local : 0] ?? participants[0];
+        const audioP = fetch(ttsUrl(globalIdx, data.reply))
           .then(r => (r.ok ? r.blob() : null))
           .catch(() => null);
-        return { data, audioP };
+        return { data, globalIdx, audioP };
       })
       .catch(err => ({ data: { error: String(err) } }));
   }
@@ -950,34 +933,49 @@ document.addEventListener('DOMContentLoaded', () => {
   async function runBanterTurn(session) {
     if (!isBanterRunning || session !== banterSession) return;
 
-    const turn = await (pendingTurn || prefetchTurn());
+    // 画面に2体以上映っていなければ会話しない（映るまで待機）
+    const visible = visibleSpiritIndices();
+    if (visible.length < 2) {
+      pendingTurn = null;
+      spirits.forEach((_, i) => hideSpeechBubble(i));
+      banterTimeout = setTimeout(() => runBanterTurn(session), 700);
+      return;
+    }
+
+    const turn = await (pendingTurn || fetchTurn(visible));
     pendingTurn = null;
     if (!isBanterRunning || session !== banterSession) return;
 
     if (!turn || !turn.data || turn.data.error || !turn.data.reply) {
       console.error('Banter turn error:', turn && turn.data);
-      banterTimeout = setTimeout(() => runBanterTurn(session), 4000);
+      banterTimeout = setTimeout(() => runBanterTurn(session), 3000);
       return;
     }
 
-    const data = turn.data;
-    const idx = speakerIndex(data.nextSpeaker);
+    const idx = turn.globalIdx;
 
-    banterHistory.push({ sender: `agent${idx}`, text: data.reply });
+    // 先読み中に話者が画面外へ出ていたら、このターンは捨てて作り直す
+    if (!visibleTargets.has(idx)) {
+      banterTimeout = setTimeout(() => runBanterTurn(session), 200);
+      return;
+    }
+
+    banterHistory.push({ name: spirits[idx].name, text: turn.data.reply });
     if (banterHistory.length > 15) banterHistory.shift();
 
-    // 再生中に次のターンを先読みしてテンポを上げる
-    pendingTurn = prefetchTurn();
+    // 再生中に次のターンを先読み（現在映っている参加者で）してテンポを上げる
+    const nextVisible = visibleSpiritIndices();
+    pendingTurn = nextVisible.length >= 2 ? fetchTurn(nextVisible) : null;
 
     spirits.forEach((_, i) => { if (i !== idx) hideSpeechBubble(i); });
-    showSpeechBubble(idx, data.reply);
+    showSpeechBubble(idx, turn.data.reply);
 
     const blob = turn.audioP ? await turn.audioP : null;
     if (!isBanterRunning || session !== banterSession) return;
 
     playLine(blob, (spoke) => {
       if (!isBanterRunning || session !== banterSession) return;
-      const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + data.reply.length * 90);
+      const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + turn.data.reply.length * 90);
       banterTimeout = setTimeout(() => runBanterTurn(session), delay);
     });
   }
@@ -1061,9 +1059,16 @@ document.addEventListener('DOMContentLoaded', () => {
       dur: 300,
       easing: 'easeOutBack'
     });
+
+    // マーカー(リング)は話している1体だけに表示する
+    const ring = document.getElementById(`ring-${id}`);
+    if (ring) ring.setAttribute('visible', 'true');
   }
 
   function hideSpeechBubble(id) {
+    const ring = document.getElementById(`ring-${id}`);
+    if (ring) ring.setAttribute('visible', 'false');
+
     const plane = document.getElementById(`bubble-plane-${id}`);
     if (!plane) return;
     plane.setAttribute('animation', {

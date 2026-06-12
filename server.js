@@ -187,9 +187,13 @@ app.post('/api/banter', async (req, res) => {
     let conversation = 'これまでの会話履歴:\n';
     if (history && history.length > 0) {
       history.forEach(h => {
-        const idx = parseInt(String(h.sender).replace('agent', ''), 10);
-        const name = (spirits[idx] && spirits[idx].name) || h.sender;
-        conversation += `${name}: ${h.text}\n`;
+        // 新形式は {name, text}。旧形式 {sender:'agentN'} もフォールバックで対応
+        let name = h.name;
+        if (!name && h.sender != null) {
+          const idx = parseInt(String(h.sender).replace('agent', ''), 10);
+          name = (spirits[idx] && spirits[idx].name) || h.sender;
+        }
+        conversation += `${name || '精霊'}: ${h.text}\n`;
       });
     } else {
       conversation += '(履歴なし。誰かが勢いよく会話の口火を切ること。)\n';
