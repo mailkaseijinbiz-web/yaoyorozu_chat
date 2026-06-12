@@ -379,6 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 魂の注入 → 召喚 (登録数無制限)
   // ==========================================
 
+  const infusionSound = new Audio('install_soul.mp3');
+
   async function triggerSoulInfusion() {
     if (!detectedTarget) {
       resetGaze();
@@ -390,6 +392,10 @@ document.addEventListener('DOMContentLoaded', () => {
     flashOverlay.classList.remove('flash');
     void flashOverlay.offsetWidth;
     flashOverlay.classList.add('flash');
+
+    // 注入効果音 (初回タップ前のiOSではブロックされる場合があるが無視)
+    infusionSound.currentTime = 0;
+    infusionSound.play().catch(() => {});
 
     try {
       const fullImg = await loadImage(snapshotCanvas.toDataURL('image/jpeg'));
