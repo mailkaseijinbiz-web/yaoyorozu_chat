@@ -454,9 +454,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // 凝視ゲージ (3秒で自動注入)
   // ==========================================
 
+  const installingSound = new Audio('soul_installing.mp3'); // 凝視中のチャージ音
+
   function startGaze() {
     if (gazeStartTime !== null) return;
     gazeStartTime = Date.now();
+    installingSound.currentTime = 0;
+    installingSound.play().catch(() => {});
     updateScanLine();
 
     gazeInterval = setInterval(() => {
@@ -478,6 +482,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gazeInterval) {
       clearInterval(gazeInterval);
       gazeInterval = null;
+    }
+    if (!installingSound.paused) {
+      installingSound.pause();
+      installingSound.currentTime = 0;
     }
     updateScanLine();
   }
@@ -739,15 +747,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!banterAudio) banterAudio = new Audio();
     banterAudio.src = SILENT_WAV;
     banterAudio.play().then(() => hideToast()).catch(() => {});
-    // 注入効果音もタップ起点でアンロックしておく (iOS対策)
-    if (infusionSound.paused) {
-      infusionSound.muted = true;
-      infusionSound.play().then(() => {
-        infusionSound.pause();
-        infusionSound.currentTime = 0;
-        infusionSound.muted = false;
-      }).catch(() => { infusionSound.muted = false; });
-    }
+    // 効果音もタップ起点でアンロックしておく (iOS対策)
+    [infusionSound, installingSound].forEach(sfx => {
+      if (!sfx.paused) return;
+      sfx.muted = true;
+      sfx.play().then(() => {
+        sfx.pause();
+        sfx.currentTime = 0;
+        sfx.muted = false;
+      }).catch(() => { sfx.muted = false; });
+    });
     audioUnlocked = true;
   });
 
