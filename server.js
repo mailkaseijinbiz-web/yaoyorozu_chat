@@ -4,7 +4,7 @@ const path = require('path');
 const cors = require('cors');
 const { GoogleGenAI } = require('@google/genai');
 
-dotenv.config({ override: true, quiet: true });
+dotenv.config({ override: true });
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,7 +21,9 @@ if (!hasApiKey) {
 }
 
 function parseJSONSafe(text) {
-  const trimmed = text.trim();
+  let trimmed = text.trim();
+  // Strip markdown code fences (```json ... ```)
+  trimmed = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   try {
     return JSON.parse(trimmed);
   } catch (e) {
@@ -91,7 +93,8 @@ app.post('/api/segment-vessels', async (req, res) => {
   }
 
   if (!hasApiKey) {
-    const demo = DEMO_VESSELS[demoSegmentCount++ % DEMO_VESSELS.length];
+    const demo = DEMO_VESSELS[demoSegmentCount];
+    demoSegmentCount = (demoSegmentCount + 1) % DEMO_VESSELS.length;
     return res.json({
       demo: true,
       targets: [{ ...demo, box: [200, 200, 800, 800] }]
@@ -246,8 +249,9 @@ const ELEVENLABS_VOICES = {
 
 const hasTtsKey = !!process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY !== 'your_elevenlabs_api_key_here';
 
-app.get('/api/tts', async (req, res) => {
-  const { text, voice } = req.query;
+app.all('/api/tts', async (req, res) => {
+  const text = req.body?.text || req.query.text;
+  const voice = req.body?.voice || req.query.voice;
 
   if (!text) {
     return res.status(400).json({ error: 'Text query parameter is required' });
@@ -287,7 +291,12 @@ app.get('/api/tts', async (req, res) => {
 
     res.setHeader('Content-Type', 'audio/mpeg');
     const { Readable } = require('stream');
-    Readable.fromWeb(response.body).pipe(res);
+    if (typeof Readable.fromWeb === 'function') {
+      Readable.fromWeb(response.body).pipe(res);
+    } else {
+      const buf = Buffer.from(await response.arrayBuffer());
+      res.end(buf);
+    }
   } catch (error) {
     console.error('Error generating ElevenLabs TTS:', error);
     res.status(500).json({ error: 'Failed to generate TTS' });
@@ -301,5 +310,11 @@ if (require.main === module) {
     console.log(`Mode: ${hasApiKey ? 'Gemini API' : 'DEMO (no API key)'}`);
   });
 }
+
+// Express 5 グローバルエラーハンドラー
+app.use((err, req, res, _next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 module.exports = app;

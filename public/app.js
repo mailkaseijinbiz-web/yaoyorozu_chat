@@ -11,7 +11,7 @@ AFRAME.registerComponent('billboard', {
     obj.parent.getWorldQuaternion(this.qParent);
     cam.getWorldQuaternion(this.qCam);
     // ワールド回転がカメラと一致するよう、親の回転を打ち消す
-    obj.quaternion.copy(this.qParent.invert().multiply(this.qCam));
+    obj.quaternion.copy(this.qParent.clone().invert().multiply(this.qCam));
   }
 });
 
@@ -538,6 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(gazeInterval);
         gazeInterval = null;
         gazeStartTime = null;
+        stopScanning();
         triggerSoulInfusion();
       }
     }, 50);
@@ -611,7 +612,6 @@ document.addEventListener('DOMContentLoaded', () => {
       resetGaze();
       return;
     }
-    stopScanning();
 
     flashOverlay.classList.remove('flash');
     void flashOverlay.offsetWidth;
@@ -743,12 +743,18 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Compilation error:', err);
       isCompiling = false;
       loadingOverlay.classList.add('hidden');
-      showToast('ARコンパイルに失敗しました。リロードしてやり直してください', true);
+      showToast('ARコンパイルに失敗しました。再スキャンします…');
+      // デッドロック防止: カメラとスキャンを再開して復旧
+      if (mode === 'scan') {
+        await startCamera();
+        videoElement.classList.remove('hidden-feed');
+      }
+      startScanning();
     }
   }
 
   function buildScene() {
-    const maxTrack = Math.min(spirits.length, 3);
+    const maxTrack = Math.min(spirits.length, 5);
     // リングは「今しゃべっている1体」だけに表示してマーカーが複数並ばないようにする
     const targetsHTML = spirits.map((s, i) => `
       <a-entity mindar-image-target="targetIndex: ${i}" id="target-entity-${i}">
@@ -817,13 +823,17 @@ document.addEventListener('DOMContentLoaded', () => {
     audioUnlocked = true;
   });
 
-  function ttsUrl(spiritIndex, text) {
+  function fetchTTS(spiritIndex, text) {
     const cleanText = text
       .replace(/[「」『』【】\[\]\(\)（）]/g, ' ')
       .replace(/[\n\r]+/g, '、')
       .trim();
     const voice = (spirits[spiritIndex] && spirits[spiritIndex].voice) || 'cool_male';
-    return `/api/tts?text=${encodeURIComponent(cleanText)}&voice=${encodeURIComponent(voice)}`;
+    return fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText, voice })
+    });
   }
 
   // 取得済みの音声Blobを再生し、終了時に onEnd(spoke) を呼ぶ
@@ -885,11 +895,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // 指定した参加者(グローバルindex配列)だけでセリフ生成とTTS音声取得を先読みする。
   // nextSpeaker は参加者配列内のローカルindex(agent0..)なのでグローバルindexへ写し戻す。
   function fetchTurn(participants) {
+    const participantNames = new Set(participants.map(i => spirits[i].name));
+    const filteredHistory = banterHistory.filter(h => participantNames.has(h.name));
     const body = JSON.stringify({
       spirits: participants.map(i => ({
         name: spirits[i].name, vessel: spirits[i].vessel, personality: spirits[i].personality
       })),
-      history: banterHistory,
+      history: filteredHistory,
       newcomer: newcomerToAnnounce
     });
     newcomerToAnnounce = null;
@@ -904,7 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.error || !data.reply) return { data };
         const local = parseInt(String(data.nextSpeaker).replace('agent', ''), 10);
         const globalIdx = participants[Number.isInteger(local) ? local : 0] ?? participants[0];
-        const audioP = fetch(ttsUrl(globalIdx, data.reply))
+        const audioP = fetchTTS(globalIdx, data.reply)
           .then(r => (r.ok ? r.blob() : null))
           .catch(() => null);
         return { data, globalIdx, audioP };
@@ -1078,7 +1090,9 @@ document.addEventListener('DOMContentLoaded', () => {
       dur: 200,
       easing: 'easeInQuad'
     });
-    setTimeout(() => plane.setAttribute('visible', 'false'), 220);
+    setTimeout(() => {
+      if (plane.parentNode) plane.setAttribute('visible', 'false');
+    }, 220);
   }
 
   // ==========================================
