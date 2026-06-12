@@ -317,10 +317,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           detectedTarget = target;
           detectedColor = extractThemeColor(snapshotCanvas, target.box);
-          const progress = gazeStartTime !== null
-            ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
-          drawBoundingBox(target, progress);
-          scanStatus.textContent = `「${target.name}」を捕捉中 — そのまま凝視！`;
+          startOverlayLoop();
+          // 認識できたモノを画面下に白で表示
+          scanStatus.textContent = `${target.name} — ${target.spiritName}`;
           if (mode === 'ar') guideText.textContent = `「${target.spiritName}」を凝視で召喚`;
           startGaze();
         }
@@ -343,56 +342,112 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // progress (0〜1): 凝視の進行度。矩形が下から段々と色で塗られていく
-  function drawBoundingBox(target, progress = 0) {
+  // ===== 認識エフェクト (requestAnimationFrameで常時描画) =====
+
+  let overlayRAF = null;
+
+  function startOverlayLoop() {
+    if (overlayRAF === null) overlayRAF = requestAnimationFrame(overlayTick);
+  }
+
+  function overlayTick(time) {
+    overlayRAF = null;
+    if (!isScanning || !detectedTarget) {
+      clearOverlay();
+      return;
+    }
+    drawRecognition(time);
+    overlayRAF = requestAnimationFrame(overlayTick);
+  }
+
+  function drawRecognition(time) {
     const ctx = overlayCanvas.getContext('2d');
     const w = overlayCanvas.width;
     const h = overlayCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
     const color = detectedColor || nextColor();
-    const [ymin, xmin, ymax, xmax] = target.box.map(v => v / 1000);
+    const [ymin, xmin, ymax, xmax] = detectedTarget.box.map(v => v / 1000);
     const rx = xmin * w;
     const ry = ymin * h;
     const rw = (xmax - xmin) * w;
     const rh = (ymax - ymin) * h;
+    const progress = gazeStartTime !== null
+      ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
+    const pulse = 0.5 + 0.5 * Math.sin(time / 300);
 
-    // ベースのうっすら塗り + 進行度に応じた下からの塗り潰し
-    ctx.fillStyle = color + '1a';
-    ctx.fillRect(rx, ry, rw, rh);
+    // 1. エネルギー充填 (凝視の進行に合わせて下から満ちる)
     if (progress > 0) {
-      const fillH = rh * Math.min(1, progress);
-      ctx.fillStyle = color + '8c';
-      ctx.fillRect(rx, ry + rh - fillH, rw, fillH);
+      const fillH = rh * progress;
+      const gy = ry + rh - fillH;
+      const grad = ctx.createLinearGradient(0, ry + rh, 0, gy);
+      grad.addColorStop(0, color + 'a6');
+      grad.addColorStop(1, color + '24');
+      ctx.fillStyle = grad;
+      ctx.fillRect(rx, gy, rw, fillH);
+
+      // 充填面の光るライン
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.moveTo(rx, gy);
+      ctx.lineTo(rx + rw, gy);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 上昇するパーティクル
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 16; i++) {
+        const px = rx + ((i * 0.618) % 1) * rw;
+        const speed = 900 + (i % 5) * 350;
+        const frac = ((time + i * 530) % speed) / speed;
+        const py = ry + rh - frac * fillH;
+        const size = 1.5 + (i % 3);
+        ctx.globalAlpha = (1 - frac) * 0.9;
+        ctx.fillRect(px, py, size, size);
+      }
+      ctx.globalAlpha = 1;
     }
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(rx, ry, rw, rh);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(rx, ry, rw, rh);
-
-    const labelText = `✨ ${target.spiritName || '精霊'}: ${target.name}`;
-    ctx.font = 'bold 13px Helvetica Neue, Arial, sans-serif';
-    const labelW = ctx.measureText(labelText).width + 16;
-    const labelH = 24;
-    let labelX = rx;
-    let labelY = ry - labelH - 5;
-    if (labelY < 0) labelY = ry + 5;
-
-    ctx.fillStyle = 'rgba(11, 15, 25, 0.85)';
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(labelX, labelY, labelW, labelH, 5);
-    else ctx.rect(labelX, labelY, labelW, labelH);
-    ctx.fill();
+    // 2. 流れる破線の枠 (解析中の演出)
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
-    ctx.stroke();
+    ctx.setLineDash([12, 8]);
+    ctx.lineDashOffset = -time / 25;
+    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.setLineDash([]);
 
-    ctx.fillStyle = '#ffffff';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(labelText, labelX + 8, labelY + labelH / 2);
+    // 3. パルスするコーナーブラケット
+    const len = Math.min(26, rw * 0.2, rh * 0.2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 6 + pulse * 10 + progress * 12;
+    const corners = [
+      [rx, ry, 1, 1], [rx + rw, ry, -1, 1],
+      [rx, ry + rh, 1, -1], [rx + rw, ry + rh, -1, -1]
+    ];
+    corners.forEach(([cx, cy, dx, dy]) => {
+      ctx.beginPath();
+      ctx.moveTo(cx + dx * len, cy);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx, cy + dy * len);
+      ctx.stroke();
+    });
+    ctx.shadowBlur = 0;
+
+    // 4. 解析スイープライン (凝視前のみ)
+    if (progress === 0) {
+      const sy = ry + (0.5 + 0.5 * Math.sin(time / 450)) * rh;
+      const grad2 = ctx.createLinearGradient(rx, 0, rx + rw, 0);
+      grad2.addColorStop(0, color + '00');
+      grad2.addColorStop(0.5, color + 'e6');
+      grad2.addColorStop(1, color + '00');
+      ctx.fillStyle = grad2;
+      ctx.fillRect(rx, sy - 1.5, rw, 3);
+    }
   }
 
   // ==========================================
@@ -407,10 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gazeInterval = setInterval(() => {
       if (gazeStartTime === null) return;
       const elapsed = Date.now() - gazeStartTime;
-      const progress = Math.min(1, elapsed / GAZE_DURATION);
-
-      // 認識した矩形が段々と塗られていく
-      if (detectedTarget) drawBoundingBox(detectedTarget, progress);
+      // 進行の見た目はoverlayTick(rAF)側がgazeStartTimeから描画する
 
       if (elapsed >= GAZE_DURATION) {
         clearInterval(gazeInterval);
@@ -427,7 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(gazeInterval);
       gazeInterval = null;
     }
-    if (detectedTarget) drawBoundingBox(detectedTarget, 0);
     updateScanLine();
   }
 
@@ -589,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const imgs = await Promise.all(spirits.map(s => loadImage(s.image)));
       const compiler = new window.MINDAR.IMAGE.Compiler();
       await compiler.compileImageTargets(imgs, (p) => {
-        loadingText.textContent = `魂を抽出中... ${Math.round(p)}%`;
+        loadingText.textContent = '魂を抽出中...';
       });
       const buffer = await compiler.exportData();
       if (compiledMindUrl) URL.revokeObjectURL(compiledMindUrl);
@@ -667,6 +718,21 @@ document.addEventListener('DOMContentLoaded', () => {
   let audioUnlocked = false;
   // 無音wav: ユーザー操作起点でAudioをアンロックする (iOS Safari対策)
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+
+  // マイクをキャプチャ状態にしておくと、iOS/Androidはページの音声自動再生を許可する。
+  // これでタップなしでも精霊の声が出る (録音・送信は一切しない)。
+  // 権限を拒否された場合は従来のタップアンロックにフォールバック。
+  let micStream = null;
+  async function enableTapFreeAudio() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioUnlocked = true;
+      hideToast();
+    } catch (e) {
+      console.warn('Mic capture unavailable, falling back to tap unlock:', e.message);
+    }
+  }
 
   document.addEventListener('pointerdown', () => {
     if (audioUnlocked) return;
@@ -934,6 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function init() {
     const started = await startCamera();
     if (started) startScanning();
+    enableTapFreeAudio();
   }
 
   setTimeout(init, 300);

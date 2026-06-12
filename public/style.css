@@ -105,14 +105,16 @@ html, body {
   100% { top: 2%; }
 }
 
+/* 認識結果の表示 (画面下・白) */
 #scan-status {
   position: absolute;
-  bottom: 12.5%;
+  bottom: 7%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  font-size: 17px;
+  font-weight: bold;
+  color: #ffffff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
   max-width: 94vw;
   overflow: hidden;
