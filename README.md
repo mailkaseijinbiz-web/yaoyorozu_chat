@@ -2,6 +2,9 @@
 
 身の回りのモノをスキャンして精霊を宿らせ、AR空間で精霊同士を会話させるプロトタイプ。
 
+- **本番**: https://ar-agents-2.vercel.app （HTTPSなのでスマホからそのまま動く）
+- **リポジトリ**: https://github.com/mailkaseijinbiz-web/ar_agents_2 （mainへのpushで自動デプロイ）
+
 ## フロー
 
 1. **起動** — 背面カメラが立ち上がり、1つ目の器（青の魂）のスキャンが自動で始まる
@@ -33,6 +36,7 @@ http://localhost:3000 を開く。
 | `server.js` | Express + Gemini API（物体検出/動的精霊名 `/api/segment-vessels`、会話生成 `/api/banter`、ElevenLabs音声 `/api/tts`） |
 | `public/app.js` | スキャン→凝視ゲージ→自動注入→MindARランタイムコンパイル→ARシーン→Banterループ |
 | `public/index.html` | A-Frame 1.5.0 + MindAR 1.2.5 (CDN) |
+| `api/index.js` + `vercel.json` | Vercelサーバーレス対応（`/api/*`をExpressに委譲、静的ファイルは`public/`から配信） |
 
 ## チューニング
 
