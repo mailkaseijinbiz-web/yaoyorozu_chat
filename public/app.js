@@ -19,7 +19,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadingText = document.getElementById('loading-text');
   const snapshotCanvas = document.getElementById('snapshot-canvas');
   const arSceneContainer = document.getElementById('ar-scene-container');
-  const transcriptDiv = document.getElementById('transcript');
   const toastDiv = document.getElementById('toast');
 
   // ===== 状態 =====
@@ -200,8 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isScanning || isRequestPending) return;
     const session = scanSessionId;
 
-    // ARモード中: 登録済み精霊が画面内にいる間やコンパイル中は新規スキャンを止める
-    if (mode === 'ar' && (visibleTargets.size > 0 || isCompiling)) {
+    // コンパイル中は新規スキャンを止める (登録済みのモノは検出後に名前でスキップする)
+    if (isCompiling) {
       clearOverlay();
       resetGaze();
       scanTimeout = setTimeout(runScanCycle, SCAN_INTERVAL);
@@ -229,10 +228,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.targets && data.targets.length > 0) {
         const target = data.targets[0];
         if (isRegistered(target.name)) {
+          // 登録済みのモノはスルー (AR中は通常の鑑賞状態なので黙ってスキップ)
           detectedTarget = null;
           clearOverlay();
-          scanStatus.textContent = `「${target.name}」は登録済み — 別のモノを写してください`;
-          if (mode === 'ar') updateGuideUI();
+          if (mode === 'scan') {
+            scanStatus.textContent = `「${target.name}」は登録済み — 別のモノを写してください`;
+          } else {
+            updateGuideUI();
+          }
           resetGaze();
         } else {
           detectedTarget = target;
@@ -739,7 +742,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const data = turn.data;
     const idx = speakerIndex(data.nextSpeaker);
-    const spirit = spirits[idx];
 
     banterHistory.push({ sender: `agent${idx}`, text: data.reply });
     if (banterHistory.length > 15) banterHistory.shift();
@@ -749,7 +751,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     spirits.forEach((_, i) => { if (i !== idx) hideSpeechBubble(i); });
     showSpeechBubble(idx, data.reply);
-    showTranscript(spirit, data.reply);
 
     const blob = turn.audioP ? await turn.audioP : null;
     if (!isBanterRunning || session !== banterSession) return;
@@ -759,18 +760,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + data.reply.length * 90);
       banterTimeout = setTimeout(() => runBanterTurn(session), delay);
     });
-  }
-
-  function showTranscript(spirit, text) {
-    transcriptDiv.classList.remove('hidden');
-    transcriptDiv.style.borderColor = spirit.color;
-    transcriptDiv.style.boxShadow = `0 0 14px ${spirit.color}66`;
-    transcriptDiv.innerHTML = '';
-    const label = document.createElement('span');
-    label.className = 'speaker';
-    label.textContent = `${spirit.name}（${spirit.vessel}）`;
-    transcriptDiv.appendChild(label);
-    transcriptDiv.appendChild(document.createTextNode(text));
   }
 
   // ===== 3D吹き出し (CanvasTexture直接適用) =====

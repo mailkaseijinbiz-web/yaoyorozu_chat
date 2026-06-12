@@ -119,30 +119,6 @@ html, body {
   text-overflow: ellipsis;
 }
 
-/* ===== 会話トランスクリプト ===== */
-#transcript {
-  position: absolute;
-  bottom: 4%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(88vw, 480px);
-  padding: 13px 16px;
-  border-radius: 14px;
-  background: rgba(11, 15, 25, 0.85);
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  font-size: 14px;
-  line-height: 1.55;
-  transition: border-color 0.3s, box-shadow 0.3s;
-}
-
-#transcript .speaker {
-  display: block;
-  font-size: 11px;
-  font-weight: bold;
-  opacity: 0.75;
-  margin-bottom: 3px;
-}
-
 /* ===== トースト通知 ===== */
 #toast {
   position: absolute;
