@@ -250,6 +250,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return spirits.some(s => String(s.vessel).replace(/\s/g, '') === n);
   }
 
+  function updateScanGuideVisibility() {
+    if (mode === 'ar') {
+      if (visibleTargets.size > 0) {
+        guideText.classList.add('hidden');
+        captureGuide.classList.add('hidden');
+      } else {
+        guideText.classList.remove('hidden');
+        captureGuide.classList.remove('hidden');
+        captureGuide.classList.add('subtle');
+      }
+    } else {
+      guideText.classList.remove('hidden');
+      captureGuide.classList.remove('hidden');
+      captureGuide.classList.remove('subtle');
+    }
+  }
+
   function updateGuideUI() {
     const color = '#00e5ff';
     if (mode === 'scan') {
@@ -263,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scanLine.style.background = `linear-gradient(90deg, transparent, ${color}, transparent)`;
     scanLine.style.boxShadow = `0 0 14px ${color}`;
     updateScanLine();
+    updateScanGuideVisibility();
   }
 
   // スキャンラインは初期スキャン中のみ表示 (凝視中は矩形の塗り潰しが進行表示になる)
@@ -796,12 +814,14 @@ document.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('targetFound', () => {
         visibleTargets.add(i);
         scanStatus.textContent = `${spirit.name}がここにいます`;
+        updateScanGuideVisibility();
       });
       el.addEventListener('targetLost', () => {
         visibleTargets.delete(i);
         // 画面外に出たら会話・マーカーを止める
         hideSpeechBubble(i);
         if (visibleTargets.size === 0) scanStatus.textContent = '';
+        updateScanGuideVisibility();
       });
     });
   }
