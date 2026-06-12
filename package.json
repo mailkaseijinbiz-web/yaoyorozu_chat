@@ -1,0 +1,16 @@
+{
+  "name": "ar_agents_2",
+  "version": "0.1.0",
+  "description": "AR精霊プロトタイプ: 凝視スキャン → MindAR自動コンパイル → 精霊Banter",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^2.8.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
