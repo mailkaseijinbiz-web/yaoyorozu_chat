@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let isRequestPending = false;
   let scanTimeout = null;
   let detectedTarget = null;
+  let detectedColor = null;
   let isCompiling = false;
 
   let gazeStartTime = null;
@@ -99,13 +100,90 @@ document.addEventListener('DOMContentLoaded', () => {
     return COLORS[spirits.length % COLORS.length];
   }
 
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => {
+      const k = (n + h / 30) % 12;
+      const c = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+      return Math.round(255 * c).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  }
+
+  // 切り出した画像領域から、彩度で重み付けした色相ヒストグラムでドミナントカラーを抽出
+  function extractThemeColor(source, box) {
+    try {
+      const [ymin, xmin, ymax, xmax] = box.map(v => v / 1000);
+      const sw = Math.max(1, (xmax - xmin) * source.width);
+      const sh = Math.max(1, (ymax - ymin) * source.height);
+      const c = document.createElement('canvas');
+      c.width = 24;
+      c.height = 24;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(source, xmin * source.width, ymin * source.height, sw, sh, 0, 0, 24, 24);
+      const data = cx.getImageData(0, 0, 24, 24).data;
+
+      const bins = new Array(12).fill(0);
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i] / 255, g = data[i + 1] / 255, b = data[i + 2] / 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const l = (max + min) / 2;
+        const d = max - min;
+        if (d < 0.08 || l < 0.12 || l > 0.92) continue; // 無彩色・白飛び・黒潰れは無視
+        let h;
+        if (max === r) h = ((g - b) / d + 6) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        const s = d / (1 - Math.abs(2 * l - 1));
+        bins[Math.floor((h * 60) / 30) % 12] += s;
+      }
+
+      let best = -1, bestV = 0;
+      bins.forEach((v, i) => { if (v > bestV) { bestV = v; best = i; } });
+      if (best < 0) return nextColor(); // ほぼ無彩色のオブジェクトはパレットから
+      return hslToHex(best * 30 + 15, 85, 62);
+    } catch (e) {
+      return nextColor();
+    }
+  }
+
+  // 検出矩形が、トラッキング中の精霊のスクリーン位置と重なっているか
+  // (既に会話に参加しているモノの上から二重登録されるのを防ぐ)
+  function isOverTrackedSpirit(box) {
+    if (mode !== 'ar' || visibleTargets.size === 0) return false;
+    const sceneEl = arSceneContainer.querySelector('a-scene');
+    if (!sceneEl || !sceneEl.camera) return false;
+
+    const guideRect = captureGuide.getBoundingClientRect();
+    const [ymin, xmin, ymax, xmax] = box.map(v => v / 1000);
+    const bx1 = guideRect.left + xmin * guideRect.width;
+    const by1 = guideRect.top + ymin * guideRect.height;
+    const bx2 = guideRect.left + xmax * guideRect.width;
+    const by2 = guideRect.top + ymax * guideRect.height;
+    const mx = (bx2 - bx1) * 0.2;
+    const my = (by2 - by1) * 0.2;
+
+    const v = new THREE.Vector3();
+    for (const i of visibleTargets) {
+      const el = document.getElementById(`target-entity-${i}`);
+      if (!el || !el.object3D) continue;
+      el.object3D.getWorldPosition(v);
+      v.project(sceneEl.camera);
+      const sx = (v.x + 1) / 2 * window.innerWidth;
+      const sy = (1 - v.y) / 2 * window.innerHeight;
+      if (sx >= bx1 - mx && sx <= bx2 + mx && sy >= by1 - my && sy <= by2 + my) return true;
+    }
+    return false;
+  }
+
   function isRegistered(name) {
     const n = String(name).replace(/\s/g, '');
     return spirits.some(s => String(s.vessel).replace(/\s/g, '') === n);
   }
 
   function updateGuideUI() {
-    const color = nextColor();
+    const color = '#00e5ff';
     if (mode === 'scan') {
       guideText.textContent = '精霊を凝視して召喚せよ...';
     } else {
@@ -226,8 +304,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (data.targets && data.targets.length > 0) {
         const target = data.targets[0];
-        if (isRegistered(target.name)) {
-          // 登録済みのモノはスルー (AR中は通常の鑑賞状態なので黙ってスキップ)
+        if (isRegistered(target.name) || isOverTrackedSpirit(target.box)) {
+          // 登録済み・会話参加中のモノはスルー (二重登録とマークの重なりを防ぐ)
           detectedTarget = null;
           clearOverlay();
           if (mode === 'scan') {
@@ -238,6 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
           resetGaze();
         } else {
           detectedTarget = target;
+          detectedColor = extractThemeColor(snapshotCanvas, target.box);
           const progress = gazeStartTime !== null
             ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
           drawBoundingBox(target, progress);
@@ -247,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } else {
         detectedTarget = null;
+        detectedColor = null;
         clearOverlay();
         if (mode === 'scan') scanStatus.textContent = '';
         else updateGuideUI();
@@ -270,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const h = overlayCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const color = nextColor();
+    const color = detectedColor || nextColor();
     const [ymin, xmin, ymax, xmax] = target.box.map(v => v / 1000);
     const rx = xmin * w;
     const ry = ymin * h;
@@ -423,7 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
         name: target.spiritName || `精霊${spirits.length}`,
         personality: target.personality || '陽気でおしゃべり好き',
         voice: target.voice || 'cool_male',
-        color: nextColor()
+        color: detectedColor || nextColor() // 撮影したモノのドミナントカラー
       });
       const newSpirit = spirits[spirits.length - 1];
       showToast(`✨ ${newSpirit.name}が宿った！`);
