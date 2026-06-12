@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let scanTimeout = null;
   let detectedTarget = null;
   let detectedColor = null;
+  let detectedSig = null;
   let isCompiling = false;
 
   let gazeStartTime = null;
@@ -163,6 +164,55 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       return nextColor();
     }
+  }
+
+  // ===== 画像類似度による重複判定 =====
+  // 登録済みのモノがトラッキングを外れた瞬間に別名で再認識され、
+  // 二重召喚されてマーカーが重なるのを防ぐ
+  const DUP_SIMILARITY = 0.85; // 正規化相関がこれ以上なら同一物とみなす
+
+  function regionSignature(source, box) {
+    try {
+      const [ymin, xmin, ymax, xmax] = box.map(v => v / 1000);
+      const c = document.createElement('canvas');
+      c.width = 16;
+      c.height = 16;
+      const cx = c.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(
+        source,
+        xmin * source.width, ymin * source.height,
+        Math.max(1, (xmax - xmin) * source.width), Math.max(1, (ymax - ymin) * source.height),
+        0, 0, 16, 16
+      );
+      const d = cx.getImageData(0, 0, 16, 16).data;
+      const v = new Float32Array(256);
+      let mean = 0;
+      for (let i = 0; i < 256; i++) {
+        v[i] = (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 3;
+        mean += v[i];
+      }
+      mean /= 256;
+      let norm = 0;
+      for (let i = 0; i < 256; i++) {
+        v[i] -= mean;
+        norm += v[i] * v[i];
+      }
+      norm = Math.sqrt(norm) || 1;
+      for (let i = 0; i < 256; i++) v[i] /= norm;
+      return v;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function matchesRegisteredImage(sig) {
+    if (!sig) return false;
+    return spirits.some(s => {
+      if (!s.sig) return false;
+      let dot = 0;
+      for (let i = 0; i < 256; i++) dot += s.sig[i] * sig[i];
+      return dot >= DUP_SIMILARITY;
+    });
   }
 
   // 検出矩形が、トラッキング中の精霊のスクリーン位置と重なっているか
@@ -321,8 +371,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (data.targets && data.targets.length > 0) {
         const target = data.targets[0];
-        if (isRegistered(target.name) || isOverTrackedSpirit(target.box)) {
-          // 登録済み・会話参加中のモノはスルー (二重登録とマークの重なりを防ぐ)
+        const sig = regionSignature(snapshotCanvas, target.box);
+        if (isRegistered(target.name) || isOverTrackedSpirit(target.box) || matchesRegisteredImage(sig)) {
+          // 登録済み・会話参加中・見た目が登録済みと同一のモノはスルー (二重登録とマーカーの重なりを防ぐ)
           detectedTarget = null;
           clearOverlay();
           if (mode === 'scan') {
@@ -333,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
           resetGaze();
         } else {
           detectedTarget = target;
+          detectedSig = sig;
           detectedColor = extractThemeColor(snapshotCanvas, target.box);
           startOverlayLoop();
           // 認識できたモノを画面下に白で表示
@@ -343,6 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         detectedTarget = null;
         detectedColor = null;
+        detectedSig = null;
         clearOverlay();
         if (mode === 'scan') scanStatus.textContent = '';
         else updateGuideUI();
@@ -561,6 +614,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const target = detectedTarget;
+
+    // 注入直前の最終チェック: 凝視中にトラッキングが復帰した/同一物だと判明した場合は中止
+    if (isRegistered(target.name) || isOverTrackedSpirit(target.box) || matchesRegisteredImage(detectedSig)) {
+      detectedTarget = null;
+      resetGaze();
+      return;
+    }
     stopScanning();
 
     flashOverlay.classList.remove('flash');
@@ -579,7 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
         name: target.spiritName || `精霊${spirits.length}`,
         personality: target.personality || '陽気でおしゃべり好き',
         voice: target.voice || 'cool_male',
-        color: detectedColor || nextColor() // 撮影したモノのドミナントカラー
+        color: detectedColor || nextColor(), // 撮影したモノのドミナントカラー
+        sig: detectedSig                     // 重複召喚防止用の画像シグネチャ
       });
       const newSpirit = spirits[spirits.length - 1];
       showToast(`✨ ${newSpirit.name}が宿った！`);
