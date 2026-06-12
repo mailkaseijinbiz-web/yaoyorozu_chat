@@ -3,6 +3,7 @@ AFRAME.registerComponent('billboard', {
   init() {
     this.qParent = new THREE.Quaternion();
     this.qCam = new THREE.Quaternion();
+    this.q180 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
   },
   tick() {
     const cam = this.el.sceneEl.camera;
@@ -10,8 +11,8 @@ AFRAME.registerComponent('billboard', {
     if (!cam || !obj.parent) return;
     obj.parent.getWorldQuaternion(this.qParent);
     cam.getWorldQuaternion(this.qCam);
-    // ワールド回転がカメラと一致するよう、親の回転を打ち消す
-    obj.quaternion.copy(this.qParent.clone().invert().multiply(this.qCam));
+    // ワールド回転がカメラと一致するよう、親の回転を打ち消し、さらに180度回転して表面を向かせる
+    obj.quaternion.copy(this.qParent.clone().invert().multiply(this.qCam).multiply(this.q180));
   }
 });
 
@@ -1110,18 +1111,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================
-  // 起動: 即カメラ → スキャン開始 (ボタン不要の全自動フロー)
+  // 起動: スタート画面経由でカメラ起動・音声アンロック
   // ==========================================
 
   window.addEventListener('resize', () => {
     if (isScanning) syncOverlayCanvas();
   });
 
-  async function init() {
+  const startOverlay = document.getElementById('start-overlay');
+  const startBtn = document.getElementById('start-btn');
+
+  startBtn.addEventListener('click', async () => {
+    // ユーザー操作起点でオーディオを強制アンロック
+    if (!banterAudio) banterAudio = new Audio();
+    banterAudio.src = SILENT_WAV;
+    try {
+      await banterAudio.play();
+      audioUnlocked = true;
+    } catch (e) {
+      console.warn('Audio auto-unlock failed:', e);
+    }
+
+    // スタート画面をフェードアウト
+    startOverlay.style.opacity = '0';
+    setTimeout(() => startOverlay.classList.add('hidden'), 500);
+
+    // カメラとスキャンの開始
     const started = await startCamera();
     if (started) startScanning();
     enableTapFreeAudio();
-  }
-
-  setTimeout(init, 300);
+  });
 });
