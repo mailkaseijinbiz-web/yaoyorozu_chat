@@ -12,9 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const overlayCanvas = document.getElementById('camera-overlay-canvas');
   const captureGuide = document.getElementById('capture-guide');
   const guideText = document.getElementById('guide-text');
-  const gaugeContainer = document.getElementById('gauge-container');
-  const gaugeFill = document.getElementById('gauge-fill');
-  const gaugePct = document.getElementById('gauge-pct');
+  const scanLine = document.getElementById('scan-line');
   const scanStatus = document.getElementById('scan-status');
   const flashOverlay = document.getElementById('flash-overlay');
   const loadingOverlay = document.getElementById('loading-overlay');
@@ -111,15 +109,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const color = nextColor();
     if (mode === 'scan') {
       guideText.textContent = `${spirits.length + 1}体目の器を枠に収めて凝視`;
-      scanStatus.textContent = spirits.length === 1 ? 'あと1体で召喚が始まります...' : 'AIスキャン作動中...';
+      scanStatus.textContent = spirits.length === 1 ? 'あと1体で召喚が始まります...' : '精霊を探しています...';
     } else {
       guideText.textContent = '新しいモノを写すと精霊が増えます';
       scanStatus.textContent = '';
     }
     guideText.style.borderColor = color;
     guideText.style.boxShadow = `0 0 14px ${color}59`;
-    gaugeFill.style.background = `linear-gradient(90deg, ${color}, #ffffffcc)`;
-    gaugeFill.style.boxShadow = `0 0 12px ${color}cc`;
+    scanLine.style.background = `linear-gradient(90deg, transparent, ${color}, transparent)`;
+    scanLine.style.boxShadow = `0 0 14px ${color}`;
+    updateScanLine();
+  }
+
+  // スキャンラインは初期スキャン中のみ表示 (凝視中は矩形の塗り潰しが進行表示になる)
+  function updateScanLine() {
+    const show = mode === 'scan' && isScanning && gazeStartTime === null;
+    scanLine.classList.toggle('hidden', !show);
   }
 
   function startScanning() {
@@ -231,7 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
           resetGaze();
         } else {
           detectedTarget = target;
-          drawBoundingBox(target);
+          const progress = gazeStartTime !== null
+            ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
+          drawBoundingBox(target, progress);
           scanStatus.textContent = `「${target.name}」を捕捉中 — そのまま凝視！`;
           if (mode === 'ar') guideText.textContent = `「${target.spiritName}」を凝視で召喚`;
           startGaze();
@@ -239,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         detectedTarget = null;
         clearOverlay();
-        if (mode === 'scan') scanStatus.textContent = '対象物を探しています...';
+        if (mode === 'scan') scanStatus.textContent = '精霊を探しています...';
         else updateGuideUI();
         resetGaze();
       }
@@ -254,7 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function drawBoundingBox(target) {
+  // progress (0〜1): 凝視の進行度。矩形が下から段々と色で塗られていく
+  function drawBoundingBox(target, progress = 0) {
     const ctx = overlayCanvas.getContext('2d');
     const w = overlayCanvas.width;
     const h = overlayCanvas.height;
@@ -267,8 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const rw = (xmax - xmin) * w;
     const rh = (ymax - ymin) * h;
 
-    ctx.fillStyle = color + '26';
+    // ベースのうっすら塗り + 進行度に応じた下からの塗り潰し
+    ctx.fillStyle = color + '1a';
     ctx.fillRect(rx, ry, rw, rh);
+    if (progress > 0) {
+      const fillH = rh * Math.min(1, progress);
+      ctx.fillStyle = color + '8c';
+      ctx.fillRect(rx, ry + rh - fillH, rw, fillH);
+    }
+
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
     ctx.strokeRect(rx, ry, rw, rh);
@@ -296,6 +311,18 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.fillStyle = '#ffffff';
     ctx.textBaseline = 'middle';
     ctx.fillText(labelText, labelX + 8, labelY + labelH / 2);
+
+    // 凝視中は矩形中央に進行率を表示
+    if (progress > 0) {
+      ctx.font = 'bold 30px Helvetica Neue, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      ctx.shadowBlur = 8;
+      ctx.fillText(`${Math.round(progress * 100)}%`, rx + rw / 2, ry + rh / 2);
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'left';
+    }
   }
 
   // ==========================================
@@ -305,14 +332,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function startGaze() {
     if (gazeStartTime !== null) return;
     gazeStartTime = Date.now();
-    gaugeContainer.style.opacity = '1';
+    updateScanLine();
 
     gazeInterval = setInterval(() => {
       if (gazeStartTime === null) return;
       const elapsed = Date.now() - gazeStartTime;
-      const pct = Math.min(100, (elapsed / GAZE_DURATION) * 100);
-      gaugeFill.style.width = pct + '%';
-      gaugePct.textContent = Math.round(pct) + '%';
+      const progress = Math.min(1, elapsed / GAZE_DURATION);
+
+      // 認識した矩形が段々と塗られていく
+      if (detectedTarget) drawBoundingBox(detectedTarget, progress);
 
       if (elapsed >= GAZE_DURATION) {
         clearInterval(gazeInterval);
@@ -329,8 +357,8 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(gazeInterval);
       gazeInterval = null;
     }
-    gaugeFill.style.width = '0%';
-    gaugePct.textContent = '0%';
+    if (detectedTarget) drawBoundingBox(detectedTarget, 0);
+    updateScanLine();
   }
 
   // ==========================================
@@ -575,6 +603,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!banterAudio) banterAudio = new Audio();
     banterAudio.src = SILENT_WAV;
     banterAudio.play().then(() => hideToast()).catch(() => {});
+    // 注入効果音もタップ起点でアンロックしておく (iOS対策)
+    if (infusionSound.paused) {
+      infusionSound.muted = true;
+      infusionSound.play().then(() => {
+        infusionSound.pause();
+        infusionSound.currentTime = 0;
+        infusionSound.muted = false;
+      }).catch(() => { infusionSound.muted = false; });
+    }
     audioUnlocked = true;
   });
 

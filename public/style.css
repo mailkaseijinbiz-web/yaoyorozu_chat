@@ -87,38 +87,22 @@ html, body {
   text-overflow: ellipsis;
 }
 
-#gauge-container {
+/* スキャン中に上下するスキャンライン */
+#scan-line {
   position: absolute;
-  bottom: 18%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(72vw, 360px);
-  transition: opacity 0.3s;
+  left: 6px;
+  right: 6px;
+  top: 2%;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #00e5ff, transparent);
+  box-shadow: 0 0 14px #00e5ff;
+  animation: scan-sweep 2.2s ease-in-out infinite;
 }
-
-#gauge-label {
-  text-align: center;
-  font-size: 13px;
-  font-weight: bold;
-  margin-bottom: 6px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-}
-
-#gauge-track {
-  height: 14px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  overflow: hidden;
-}
-
-#gauge-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: 7px;
-  background: linear-gradient(90deg, #00e5ff, #76ffea);
-  box-shadow: 0 0 12px rgba(0, 229, 255, 0.8);
-  transition: width 0.08s linear;
+@keyframes scan-sweep {
+  0%   { top: 2%; }
+  50%  { top: 97%; }
+  100% { top: 2%; }
 }
 
 #scan-status {
