@@ -4,41 +4,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const SCAN_INTERVAL = 900;         // AIスキャン(物体検出)の間隔(ms)
   const MOTION_CHECK_INTERVAL = 150; // カメラぶれ検知の間隔(ms)
   const MOTION_THRESHOLD = 25;       // 平均輝度差がこれを超えたら「視線逸らし」とみなす(0-255)
+  const TURN_GAP_MS = 250;           // セリフ読み上げ後、次のターンまでの間(ms)
+  const COLORS = ['#00e5ff', '#ff5252', '#ffd740', '#69f0ae', '#e040fb', '#ff9100'];
 
   // ===== DOM =====
-  const scanContainer = document.getElementById('scan-container');
   const videoElement = document.getElementById('camera-feed');
   const overlayCanvas = document.getElementById('camera-overlay-canvas');
   const captureGuide = document.getElementById('capture-guide');
   const guideText = document.getElementById('guide-text');
+  const gaugeContainer = document.getElementById('gauge-container');
   const gaugeFill = document.getElementById('gauge-fill');
   const gaugePct = document.getElementById('gauge-pct');
   const scanStatus = document.getElementById('scan-status');
-  const resetBtn = document.getElementById('reset-btn');
   const flashOverlay = document.getElementById('flash-overlay');
   const loadingOverlay = document.getElementById('loading-overlay');
   const loadingText = document.getElementById('loading-text');
   const snapshotCanvas = document.getElementById('snapshot-canvas');
-
-  const arUiContainer = document.getElementById('ar-ui-container');
   const arSceneContainer = document.getElementById('ar-scene-container');
-  const arStatus = document.getElementById('ar-status');
   const transcriptDiv = document.getElementById('transcript');
-  const banterBtn = document.getElementById('banter-btn');
-  const arResetBtn = document.getElementById('ar-reset-btn');
+  const toastDiv = document.getElementById('toast');
 
   // ===== 状態 =====
+  let mode = 'scan'; // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
+  const spirits = []; // {image, vessel, name, personality, voice, color}
+
   let mediaStream = null;
-  let currentSlot = 0; // 0: 青の魂, 1: 赤の魂
-  const slotImages = [null, null];        // 切り出した器画像 (DataURL)
-  const vesselDescriptions = [null, null]; // 器の名前 (例: 青い空き缶)
-  const spiritNames = [null, null];        // 動的精霊名 (例: ドリンクの精霊)
+  let activeVideo = videoElement; // 現在フレームを取得する対象のvideo要素
+  let arVideo = null;
 
   let scanSessionId = 0;
   let isScanning = false;
   let isRequestPending = false;
   let scanTimeout = null;
   let detectedTarget = null;
+  let isCompiling = false;
 
   let gazeStartTime = null;
   let gazeInterval = null;
@@ -47,19 +46,31 @@ document.addEventListener('DOMContentLoaded', () => {
   let prevMotionFrame = null;
 
   let compiledMindUrl = null;
-
-  const SLOT_THEME = [
-    { label: '青の魂', icon: '🔵', color: '#00e5ff', bg: 'rgba(0, 229, 255, 0.15)', cls: 'slot-blue', glow: 'blue-glow' },
-    { label: '赤の魂', icon: '🔴', color: '#ff5252', bg: 'rgba(255, 82, 82, 0.15)', cls: 'slot-red', glow: 'red-glow' }
-  ];
+  const visibleTargets = new Set();
 
   // ==========================================
-  // カメラ
+  // トースト通知
+  // ==========================================
+
+  let toastTimeout = null;
+  function showToast(msg, sticky = false) {
+    toastDiv.textContent = msg;
+    toastDiv.classList.remove('hidden');
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = sticky ? null : setTimeout(() => toastDiv.classList.add('hidden'), 2600);
+  }
+  function hideToast() {
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastDiv.classList.add('hidden');
+  }
+
+  // ==========================================
+  // カメラ (スキャンフェーズ用)
   // ==========================================
 
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('カメラAPIが利用できません。HTTPSでアクセスしているか確認してください。');
+      showToast('カメラAPIが利用できません。HTTPSでアクセスしてください', true);
       return false;
     }
     try {
@@ -70,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (err) {
       console.error('Camera error:', err);
-      alert('カメラへのアクセスが必要です: ' + err.message);
+      showToast('カメラへのアクセスを許可してください', true);
       return false;
     }
   }
@@ -84,8 +95,32 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================
-  // スキャンループ (Gemini物体検出)
+  // スキャンループ (Gemini物体検出 / 両モード共用)
   // ==========================================
+
+  function nextColor() {
+    return COLORS[spirits.length % COLORS.length];
+  }
+
+  function isRegistered(name) {
+    const n = String(name).replace(/\s/g, '');
+    return spirits.some(s => String(s.vessel).replace(/\s/g, '') === n);
+  }
+
+  function updateGuideUI() {
+    const color = nextColor();
+    if (mode === 'scan') {
+      guideText.textContent = `${spirits.length + 1}体目の器を枠に収めて凝視`;
+      scanStatus.textContent = spirits.length === 1 ? 'あと1体で召喚が始まります...' : 'AIスキャン作動中...';
+    } else {
+      guideText.textContent = '新しいモノを写すと精霊が増えます';
+      scanStatus.textContent = '';
+    }
+    guideText.style.borderColor = color;
+    guideText.style.boxShadow = `0 0 14px ${color}59`;
+    gaugeFill.style.background = `linear-gradient(90deg, ${color}, #ffffffcc)`;
+    gaugeFill.style.boxShadow = `0 0 12px ${color}cc`;
+  }
 
   function startScanning() {
     scanSessionId++;
@@ -93,17 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
     isRequestPending = false;
     detectedTarget = null;
     resetGaze();
-
-    const theme = SLOT_THEME[currentSlot];
-    guideText.textContent = `${currentSlot + 1}つ目の器（${theme.label}）を枠に収めて凝視`;
-    guideText.className = theme.cls;
-    gaugeFill.className = currentSlot === 1 ? 'slot-red' : '';
-    scanStatus.textContent = 'AIスキャン作動中...';
-
+    updateGuideUI();
     syncOverlayCanvas();
     clearOverlay();
     startMotionWatch();
-
     runScanCycle();
   }
 
@@ -131,39 +159,52 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   }
 
-  // ガイド枠内の映像を snapshot-canvas に切り出す (object-fit: cover の座標補正込み)
+  // ガイド枠内の映像を snapshot-canvas に切り出す
+  // - スキャン用video: object-fit: cover の座標補正
+  // - MindARのvideo: 要素自体がカバーサイズに広げられているため線形マッピング
   function captureGuideRegion() {
+    const video = activeVideo;
     const guideRect = captureGuide.getBoundingClientRect();
-    const videoRect = videoElement.getBoundingClientRect();
+    const videoRect = video.getBoundingClientRect();
 
-    const ratioW = videoRect.width / videoElement.videoWidth;
-    const ratioH = videoRect.height / videoElement.videoHeight;
-    const scale = Math.max(ratioW, ratioH);
-    const actualWidth = videoElement.videoWidth * scale;
-    const actualHeight = videoElement.videoHeight * scale;
-    const offsetX = (videoRect.width - actualWidth) / 2;
-    const offsetY = (videoRect.height - actualHeight) / 2;
+    let originX, originY, scale;
+    if (video === videoElement) {
+      scale = Math.max(videoRect.width / video.videoWidth, videoRect.height / video.videoHeight);
+      originX = videoRect.left + (videoRect.width - video.videoWidth * scale) / 2;
+      originY = videoRect.top + (videoRect.height - video.videoHeight * scale) / 2;
+    } else {
+      scale = videoRect.width / video.videoWidth;
+      originX = videoRect.left;
+      originY = videoRect.top;
+    }
 
-    const sourceX = (guideRect.left - offsetX) / scale;
-    const sourceY = (guideRect.top - offsetY) / scale;
+    const sourceX = (guideRect.left - originX) / scale;
+    const sourceY = (guideRect.top - originY) / scale;
     const sourceW = guideRect.width / scale;
     const sourceH = guideRect.height / scale;
 
     snapshotCanvas.width = sourceW;
     snapshotCanvas.height = sourceH;
     const ctx = snapshotCanvas.getContext('2d');
-    ctx.drawImage(videoElement, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+    ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
 
     return snapshotCanvas.toDataURL('image/jpeg');
   }
 
   async function runScanCycle() {
     if (!isScanning || isRequestPending) return;
-
     const session = scanSessionId;
 
-    if (videoElement.videoWidth === 0) {
-      scanTimeout = setTimeout(runScanCycle, 200);
+    // ARモード中: 登録済み精霊が画面内にいる間やコンパイル中は新規スキャンを止める
+    if (mode === 'ar' && (visibleTargets.size > 0 || isCompiling)) {
+      clearOverlay();
+      resetGaze();
+      scanTimeout = setTimeout(runScanCycle, SCAN_INTERVAL);
+      return;
+    }
+
+    if (!activeVideo || activeVideo.videoWidth === 0) {
+      scanTimeout = setTimeout(runScanCycle, 300);
       return;
     }
 
@@ -181,14 +222,25 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isScanning || scanSessionId !== session) return;
 
       if (data.targets && data.targets.length > 0) {
-        detectedTarget = data.targets[0];
-        drawBoundingBox(detectedTarget);
-        scanStatus.textContent = `「${detectedTarget.name}」を捕捉中 — そのまま凝視してください`;
-        startGaze();
+        const target = data.targets[0];
+        if (isRegistered(target.name)) {
+          detectedTarget = null;
+          clearOverlay();
+          scanStatus.textContent = `「${target.name}」は登録済み — 別のモノを写してください`;
+          if (mode === 'ar') updateGuideUI();
+          resetGaze();
+        } else {
+          detectedTarget = target;
+          drawBoundingBox(target);
+          scanStatus.textContent = `「${target.name}」を捕捉中 — そのまま凝視！`;
+          if (mode === 'ar') guideText.textContent = `「${target.spiritName}」を凝視で召喚`;
+          startGaze();
+        }
       } else {
         detectedTarget = null;
         clearOverlay();
-        scanStatus.textContent = '対象物を探しています...';
+        if (mode === 'scan') scanStatus.textContent = '対象物を探しています...';
+        else updateGuideUI();
         resetGaze();
       }
     } catch (err) {
@@ -208,24 +260,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const h = overlayCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const theme = SLOT_THEME[currentSlot];
+    const color = nextColor();
     const [ymin, xmin, ymax, xmax] = target.box.map(v => v / 1000);
     const rx = xmin * w;
     const ry = ymin * h;
     const rw = (xmax - xmin) * w;
     const rh = (ymax - ymin) * h;
 
-    ctx.fillStyle = theme.bg;
+    ctx.fillStyle = color + '26';
     ctx.fillRect(rx, ry, rw, rh);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
     ctx.strokeRect(rx, ry, rw, rh);
-    ctx.strokeStyle = theme.color;
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.strokeRect(rx, ry, rw, rh);
 
-    // ラベル: 精霊名 + 器の名前
-    const labelText = `${theme.icon} ${target.spiritName || '精霊'}: ${target.name}`;
+    const labelText = `✨ ${target.spiritName || '精霊'}: ${target.name}`;
     ctx.font = 'bold 13px Helvetica Neue, Arial, sans-serif';
     const labelW = ctx.measureText(labelText).width + 16;
     const labelH = 24;
@@ -238,7 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ctx.roundRect) ctx.roundRect(labelX, labelY, labelW, labelH, 5);
     else ctx.rect(labelX, labelY, labelW, labelH);
     ctx.fill();
-    ctx.strokeStyle = theme.color;
+    ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -252,8 +303,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
 
   function startGaze() {
-    if (gazeStartTime !== null) return; // 進行中
+    if (gazeStartTime !== null) return;
     gazeStartTime = Date.now();
+    gaugeContainer.style.opacity = '1';
 
     gazeInterval = setInterval(() => {
       if (gazeStartTime === null) return;
@@ -292,7 +344,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function startMotionWatch() {
     stopMotionWatch();
-    prevMotionFrame = null;
     motionInterval = setInterval(checkMotion, MOTION_CHECK_INTERVAL);
   }
 
@@ -305,8 +356,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function checkMotion() {
-    if (videoElement.videoWidth === 0) return;
-    motionCtx.drawImage(videoElement, 0, 0, 32, 24);
+    if (!activeVideo || activeVideo.videoWidth === 0) return;
+    motionCtx.drawImage(activeVideo, 0, 0, 32, 24);
     const data = motionCtx.getImageData(0, 0, 32, 24).data;
     const gray = new Float32Array(32 * 24);
     for (let i = 0; i < gray.length; i++) {
@@ -316,17 +367,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (prevMotionFrame) {
       let sum = 0;
       for (let i = 0; i < gray.length; i++) sum += Math.abs(gray[i] - prevMotionFrame[i]);
-      const meanDiff = sum / gray.length;
-      if (meanDiff > MOTION_THRESHOLD && gazeStartTime !== null) {
+      if (sum / gray.length > MOTION_THRESHOLD && gazeStartTime !== null) {
         resetGaze();
-        scanStatus.textContent = '視線が逸れました — ゲージをリセットしました';
+        scanStatus.textContent = '視線が逸れました — ゲージをリセット';
       }
     }
     prevMotionFrame = gray;
   }
 
   // ==========================================
-  // 魂の注入 (自動) → スロット遷移 / コンパイル
+  // 魂の注入 → 召喚 (登録数無制限)
   // ==========================================
 
   async function triggerSoulInfusion() {
@@ -337,30 +387,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const target = detectedTarget;
     stopScanning();
 
-    // 画面フラッシュ
     flashOverlay.classList.remove('flash');
-    void flashOverlay.offsetWidth; // アニメーション再トリガー
+    void flashOverlay.offsetWidth;
     flashOverlay.classList.add('flash');
 
     try {
       const fullImg = await loadImage(snapshotCanvas.toDataURL('image/jpeg'));
-      slotImages[currentSlot] = cropImageWithBox(fullImg, target.box);
-      vesselDescriptions[currentSlot] = target.name || `${SLOT_THEME[currentSlot].label}の器`;
-      spiritNames[currentSlot] = target.spiritName || `${SLOT_THEME[currentSlot].label.charAt(0)}の精霊`;
+      spirits.push({
+        image: cropImageWithBox(fullImg, target.box),
+        vessel: target.name || '不思議な器',
+        name: target.spiritName || `精霊${spirits.length}`,
+        personality: target.personality || '陽気でおしゃべり好き',
+        voice: target.voice || 'cool_male',
+        color: nextColor()
+      });
+      const newSpirit = spirits[spirits.length - 1];
+      showToast(`✨ ${newSpirit.name}が宿った！`);
 
-      if (currentSlot === 0) {
-        // 自動で2つ目のスキャンへ (カメラは開いたまま)
-        currentSlot = 1;
-        setTimeout(() => startScanning(), 700);
+      if (spirits.length >= 2) {
+        // 2体以上で(再)コンパイル → ARへ。3体目以降は会話に途中参加
+        await enterAR(spirits.length > 2 ? newSpirit.name : null);
       } else {
-        // 両方完了 → MindAR自動コンパイル
-        stopCamera();
-        clearOverlay();
-        await compileTargets();
+        startScanning();
       }
     } catch (err) {
       console.error('Infusion error:', err);
-      alert('画像の処理に失敗しました。もう一度お試しください。');
+      showToast('画像の処理に失敗しました。もう一度どうぞ');
       startScanning();
     }
   }
@@ -374,7 +426,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // バウンディングボックスを正方形で切り出し (MindARターゲット用)
   function cropImageWithBox(img, box) {
     const [ymin, xmin, ymax, xmax] = box.map(v => v / 1000);
     const cropX = xmin * img.width;
@@ -396,82 +447,170 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================
-  // MindAR ランタイムコンパイル
+  // MindARコンパイル + ARシーン構築 (再入可能)
   // ==========================================
 
-  async function compileTargets() {
+  function teardownScene() {
+    const sceneEl = arSceneContainer.querySelector('a-scene');
+    if (sceneEl) {
+      try {
+        const sys = sceneEl.systems['mindar-image-system'];
+        if (sys) sys.stop();
+      } catch (e) { /* 停止失敗は無視 */ }
+    }
+    const vid = arSceneContainer.querySelector('video');
+    if (vid && vid.srcObject) {
+      vid.srcObject.getTracks().forEach(t => t.stop());
+    }
+    arSceneContainer.innerHTML = '';
+    visibleTargets.clear();
+    arVideo = null;
+  }
+
+  async function enterAR(newcomerName) {
+    isCompiling = true;
+    stopScanning();
+    stopBanterLoop();
+
     loadingOverlay.classList.remove('hidden');
     loadingText.textContent = 'MindARコンパイル準備中...';
 
+    if (mode === 'scan') {
+      stopCamera();
+      videoElement.classList.add('hidden-feed');
+    }
+    teardownScene();
+
     try {
-      const img0 = await loadImage(slotImages[0]);
-      const img1 = await loadImage(slotImages[1]);
-
+      const imgs = await Promise.all(spirits.map(s => loadImage(s.image)));
       const compiler = new window.MINDAR.IMAGE.Compiler();
-      await compiler.compileImageTargets([img0, img1], (progress) => {
-        loadingText.textContent = `魂を抽出中... ${Math.round(progress)}%`;
+      await compiler.compileImageTargets(imgs, (p) => {
+        loadingText.textContent = `魂を抽出中... ${Math.round(p)}%`;
       });
-
       const buffer = await compiler.exportData();
+      if (compiledMindUrl) URL.revokeObjectURL(compiledMindUrl);
       compiledMindUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
 
+      buildScene();
+      const sceneEl = arSceneContainer.querySelector('a-scene');
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        sceneEl.addEventListener('arReady', finish, { once: true });
+        setTimeout(finish, 8000);
+      });
+
+      arVideo = arSceneContainer.querySelector('video');
+      if (arVideo) activeVideo = arVideo;
+      mode = 'ar';
+      isCompiling = false;
+
+      captureGuide.classList.add('subtle');
       loadingOverlay.classList.add('hidden');
-      scanContainer.classList.add('hidden');
-      arUiContainer.classList.remove('hidden');
-      startARScene();
+      updateGuideUI();
+      setupTargetListeners();
+
+      startBanter(newcomerName); // 会話は自動で開始
+      startScanning();           // 追加召喚用のスキャンも継続
     } catch (err) {
       console.error('Compilation error:', err);
-      alert('ARターゲットの生成に失敗しました。やり直してください。');
+      isCompiling = false;
       loadingOverlay.classList.add('hidden');
-      fullReset();
+      showToast('ARコンパイルに失敗しました。リロードしてやり直してください', true);
     }
   }
 
-  // ==========================================
-  // ARシーン & 精霊Banter
-  // ==========================================
+  function buildScene() {
+    const maxTrack = Math.min(spirits.length, 3);
+    const targetsHTML = spirits.map((s, i) => `
+      <a-entity mindar-image-target="targetIndex: ${i}" id="target-entity-${i}">
+        <a-ring color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
+                material="shader: flat; transparent: true; opacity: 0.85"></a-ring>
+        <a-plane id="bubble-plane-${i}" position="0 0.85 0.1" width="1.6" height="0.8"
+                 material="shader: flat; transparent: true;" visible="false" scale="0 0 0"></a-plane>
+      </a-entity>`).join('');
 
-  let isBanterMode = false;
-  let banterHistory = [];
-  let banterTimeout = null;
-  const visibleTargets = new Set();
-
-  // ===== ElevenLabs TTS =====
-  let banterAudio = null;
-  // 無音wav: ボタン押下(ユーザー操作)起点でAudioをアンロックしておく (iOS Safari対策)
-  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-
-  function unlockAudio() {
-    if (banterAudio) return;
-    banterAudio = new Audio(SILENT_WAV);
-    banterAudio.play().catch(() => {});
+    arSceneContainer.innerHTML = `
+      <a-scene mindar-image="imageTargetSrc: ${compiledMindUrl}; maxTrack: ${maxTrack}; filterMinCF: 0.0001; filterBeta: 0.001;"
+               color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
+               vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+        ${targetsHTML}
+      </a-scene>
+    `;
   }
 
-  // セリフを再生し、終了時に onEnd(spoke) を呼ぶ。TTS不可なら spoke=false で即コールバック
-  function speakLine(agentId, text, onEnd) {
+  function setupTargetListeners() {
+    spirits.forEach((spirit, i) => {
+      const el = document.getElementById(`target-entity-${i}`);
+      if (!el) return;
+      el.addEventListener('targetFound', () => {
+        visibleTargets.add(i);
+        scanStatus.textContent = `${spirit.name}がここにいます`;
+      });
+      el.addEventListener('targetLost', () => {
+        visibleTargets.delete(i);
+        if (visibleTargets.size === 0) scanStatus.textContent = '';
+      });
+    });
+  }
+
+  // ==========================================
+  // 音声 (ElevenLabs TTS / 先読み再生)
+  // ==========================================
+
+  let banterAudio = null;
+  let audioUnlocked = false;
+  // 無音wav: ユーザー操作起点でAudioをアンロックする (iOS Safari対策)
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+
+  document.addEventListener('pointerdown', () => {
+    if (audioUnlocked) return;
+    if (!banterAudio) banterAudio = new Audio();
+    banterAudio.src = SILENT_WAV;
+    banterAudio.play().then(() => hideToast()).catch(() => {});
+    audioUnlocked = true;
+  });
+
+  function ttsUrl(spiritIndex, text) {
+    const cleanText = text
+      .replace(/[「」『』【】\[\]\(\)（）]/g, ' ')
+      .replace(/[\n\r]+/g, '、')
+      .trim();
+    const voice = (spirits[spiritIndex] && spirits[spiritIndex].voice) || 'cool_male';
+    return `/api/tts?text=${encodeURIComponent(cleanText)}&voice=${encodeURIComponent(voice)}`;
+  }
+
+  // 取得済みの音声Blobを再生し、終了時に onEnd(spoke) を呼ぶ
+  function playLine(blob, onEnd) {
+    if (!blob) {
+      onEnd(false);
+      return;
+    }
     if (!banterAudio) banterAudio = new Audio();
     const audio = banterAudio;
     let finished = false;
+    let objUrl = null;
     let watchdog = null;
     const finish = (spoke) => {
       if (finished) return;
       finished = true;
       if (watchdog) clearTimeout(watchdog);
       audio.onended = audio.onerror = null;
+      if (objUrl) URL.revokeObjectURL(objUrl);
       onEnd(spoke);
     };
 
-    // 括弧類は読み上げが不自然に途切れるため除去
-    const cleanText = text
-      .replace(/[「」『』【】\[\]\(\)（）]/g, ' ')
-      .replace(/[\n\r]+/g, '、')
-      .trim();
-
+    objUrl = URL.createObjectURL(blob);
     audio.onended = () => finish(true);
     audio.onerror = () => finish(false);
     watchdog = setTimeout(() => finish(true), 20000);
-    audio.src = `/api/tts?text=${encodeURIComponent(cleanText)}&agentId=${agentId}`;
-    audio.play().catch(() => finish(false));
+    audio.src = objUrl;
+    audio.play().catch(() => {
+      audioUnlocked = false;
+      showToast('🔊 画面をタップすると精霊の声が出ます', true);
+      finish(false);
+    });
   }
 
   function stopSpeaking() {
@@ -482,174 +621,139 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function startARScene() {
-    arSceneContainer.innerHTML = `
-      <a-scene mindar-image="imageTargetSrc: ${compiledMindUrl}; maxTrack: 2; filterMinCF: 0.0001; filterBeta: 0.001;"
-               color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
-               vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+  // ==========================================
+  // 精霊Banter (自動開始 / N体対応 / 先読みパイプライン)
+  // ==========================================
 
-        <a-entity mindar-image-target="targetIndex: 0" id="target-entity-0">
-          <a-ring color="#00e5ff" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
-                  material="shader: flat; transparent: true; opacity: 0.85"></a-ring>
-          <a-plane id="bubble-plane-0" position="0 0.85 0.1" width="1.6" height="0.8"
-                   material="shader: flat; transparent: true;" visible="false" scale="0 0 0"></a-plane>
-        </a-entity>
+  let banterSession = 0;
+  let isBanterRunning = false;
+  let banterHistory = [];
+  let banterTimeout = null;
+  let pendingTurn = null;
+  let newcomerToAnnounce = null;
 
-        <a-entity mindar-image-target="targetIndex: 1" id="target-entity-1">
-          <a-ring color="#ff5252" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
-                  material="shader: flat; transparent: true; opacity: 0.85"></a-ring>
-          <a-plane id="bubble-plane-1" position="0 0.85 0.1" width="1.6" height="0.8"
-                   material="shader: flat; transparent: true;" visible="false" scale="0 0 0"></a-plane>
-        </a-entity>
-      </a-scene>
-    `;
-
-    setTimeout(setupARInteractions, 500);
+  function speakerIndex(nextSpeaker) {
+    const idx = parseInt(String(nextSpeaker).replace('agent', ''), 10);
+    return Number.isInteger(idx) && idx >= 0 && idx < spirits.length ? idx : 0;
   }
 
-  function setupARInteractions() {
-    const agents = [0, 1].map(id => ({
-      id,
-      el: document.getElementById(`target-entity-${id}`),
-      name: spiritNames[id] || `${SLOT_THEME[id].label.charAt(0)}の精霊`,
-      vessel: vesselDescriptions[id] || '不思議な器',
-      glow: SLOT_THEME[id].glow
-    }));
-
-    agents.forEach(agent => {
-      agent.el.addEventListener('targetFound', () => {
-        visibleTargets.add(agent.id);
-        arStatus.textContent = `${agent.name}が現れました！`;
-        setTimeout(() => {
-          if (visibleTargets.size > 0) arStatus.classList.add('hidden');
-        }, 1500);
-      });
-
-      agent.el.addEventListener('targetLost', () => {
-        visibleTargets.delete(agent.id);
-        // 仕様: 会話はカメラが外れても停止しない
-        if (visibleTargets.size === 0 && !isBanterMode) {
-          arStatus.textContent = '器を探しています...';
-          arStatus.classList.remove('hidden');
-        }
-      });
+  // 次のターンのセリフ生成とTTS音声取得をまとめて先読みする
+  function prefetchTurn() {
+    const body = JSON.stringify({
+      spirits: spirits.map(s => ({ name: s.name, vessel: s.vessel, personality: s.personality })),
+      history: banterHistory,
+      newcomer: newcomerToAnnounce
     });
+    newcomerToAnnounce = null;
 
-    banterBtn.addEventListener('click', () => {
-      if (isBanterMode) stopBanter();
-      else startBanter();
-    });
-
-    function startBanter() {
-      isBanterMode = true;
-      banterHistory = [];
-      unlockAudio();
-      banterBtn.classList.add('active');
-      banterBtn.textContent = '⏸ 会話を止める';
-      arStatus.classList.add('hidden');
-      showTranscript('system', null, '精霊たちが会話を始めています...');
-      runBanterTurn();
-    }
-
-    function stopBanter() {
-      isBanterMode = false;
-      if (banterTimeout) {
-        clearTimeout(banterTimeout);
-        banterTimeout = null;
-      }
-      banterBtn.classList.remove('active');
-      banterBtn.textContent = '💬 精霊たちを会話させる';
-      stopSpeaking();
-      agents.forEach(a => hideSpeechBubble(a.id));
-      showTranscript('system', null, '会話を停止しました。');
-    }
-
-    async function runBanterTurn() {
-      if (!isBanterMode) return;
-
-      try {
-        const response = await fetch('/api/banter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            vessel0: agents[0].vessel,
-            vessel1: agents[1].vessel,
-            spirit0: agents[0].name,
-            spirit1: agents[1].name,
-            history: banterHistory
-          })
-        });
-        const data = await response.json();
-
-        if (!isBanterMode) return;
-        if (data.error) {
-          showTranscript('system', null, '会話エラーが発生しました。');
-          stopBanter();
-          return;
-        }
-
-        const speakerId = data.nextSpeaker === 'agent1' ? 1 : 0;
-        const speaker = agents[speakerId];
-        const text = data.reply;
-
-        banterHistory.push({ sender: data.nextSpeaker, text });
-        if (banterHistory.length > 15) banterHistory.shift();
-
-        // 話していない方の吹き出しは閉じ、話者の頭上に表示
-        hideSpeechBubble(1 - speakerId);
-        showSpeechBubble(speakerId, text);
-        showTranscript(speaker.glow, speaker.name, text);
-
-        // 音声を読み終えたら次のターンへ。TTS不可ならテキスト長ベースの表示時間で代替
-        speakLine(speakerId, text, (spoke) => {
-          if (!isBanterMode) return;
-          const delay = spoke ? 900 : Math.min(6000, 1800 + text.length * 110);
-          banterTimeout = setTimeout(runBanterTurn, delay);
-        });
-      } catch (err) {
-        console.error('Banter loop error:', err);
-        if (isBanterMode) {
-          showTranscript('system', null, '通信エラーが発生しました。');
-          stopBanter();
-        }
-      }
-    }
+    return fetch('/api/banter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error || !data.reply) return { data };
+        const idx = speakerIndex(data.nextSpeaker);
+        const audioP = fetch(ttsUrl(idx, data.reply))
+          .then(r => (r.ok ? r.blob() : null))
+          .catch(() => null);
+        return { data, audioP };
+      })
+      .catch(err => ({ data: { error: String(err) } }));
   }
 
-  function showTranscript(glowClass, speakerName, text) {
+  function startBanter(newcomerName) {
+    banterSession++;
+    isBanterRunning = true;
+    pendingTurn = null;
+    newcomerToAnnounce = newcomerName || null;
+    runBanterTurn(banterSession);
+  }
+
+  function stopBanterLoop() {
+    isBanterRunning = false;
+    pendingTurn = null;
+    if (banterTimeout) {
+      clearTimeout(banterTimeout);
+      banterTimeout = null;
+    }
+    stopSpeaking();
+  }
+
+  async function runBanterTurn(session) {
+    if (!isBanterRunning || session !== banterSession) return;
+
+    const turn = await (pendingTurn || prefetchTurn());
+    pendingTurn = null;
+    if (!isBanterRunning || session !== banterSession) return;
+
+    if (!turn || !turn.data || turn.data.error || !turn.data.reply) {
+      console.error('Banter turn error:', turn && turn.data);
+      banterTimeout = setTimeout(() => runBanterTurn(session), 4000);
+      return;
+    }
+
+    const data = turn.data;
+    const idx = speakerIndex(data.nextSpeaker);
+    const spirit = spirits[idx];
+
+    banterHistory.push({ sender: `agent${idx}`, text: data.reply });
+    if (banterHistory.length > 15) banterHistory.shift();
+
+    // 再生中に次のターンを先読みしてテンポを上げる
+    pendingTurn = prefetchTurn();
+
+    spirits.forEach((_, i) => { if (i !== idx) hideSpeechBubble(i); });
+    showSpeechBubble(idx, data.reply);
+    showTranscript(spirit, data.reply);
+
+    const blob = turn.audioP ? await turn.audioP : null;
+    if (!isBanterRunning || session !== banterSession) return;
+
+    playLine(blob, (spoke) => {
+      if (!isBanterRunning || session !== banterSession) return;
+      const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + data.reply.length * 90);
+      banterTimeout = setTimeout(() => runBanterTurn(session), delay);
+    });
+  }
+
+  function showTranscript(spirit, text) {
     transcriptDiv.classList.remove('hidden');
-    transcriptDiv.className = glowClass === 'system' ? '' : glowClass;
+    transcriptDiv.style.borderColor = spirit.color;
+    transcriptDiv.style.boxShadow = `0 0 14px ${spirit.color}66`;
     transcriptDiv.innerHTML = '';
-    if (speakerName) {
-      const label = document.createElement('span');
-      label.className = 'speaker';
-      label.textContent = speakerName;
-      transcriptDiv.appendChild(label);
-    }
+    const label = document.createElement('span');
+    label.className = 'speaker';
+    label.textContent = `${spirit.name}（${spirit.vessel}）`;
+    transcriptDiv.appendChild(label);
     transcriptDiv.appendChild(document.createTextNode(text));
   }
 
-  // ===== 3D吹き出し (canvasテクスチャ) =====
-  const bubbleCanvases = [0, 1].map(() => {
-    const c = document.createElement('canvas');
-    c.width = 512;
-    c.height = 256;
-    return c;
-  });
-  const bubbleTextures = [null, null];
+  // ===== 3D吹き出し (CanvasTexture直接適用) =====
+  const bubbleCanvases = [];
+  const bubbleTextures = [];
+
+  function getBubbleCanvas(i) {
+    if (!bubbleCanvases[i]) {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 256;
+      bubbleCanvases[i] = c;
+    }
+    return bubbleCanvases[i];
+  }
 
   function showSpeechBubble(id, text) {
     const plane = document.getElementById(`bubble-plane-${id}`);
     if (!plane) return;
 
-    const canvas = bubbleCanvases[id];
+    const canvas = getBubbleCanvas(id);
     const ctx = canvas.getContext('2d');
-    const themeColor = SLOT_THEME[id].color;
+    const themeColor = spirits[id].color;
 
     ctx.clearRect(0, 0, 512, 256);
 
-    // 吹き出し本体 + しっぽ
     ctx.fillStyle = 'rgba(11, 15, 25, 0.93)';
     ctx.strokeStyle = themeColor;
     ctx.lineWidth = 6;
@@ -671,7 +775,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.fill();
     ctx.stroke();
 
-    // 日本語テキストの折り返し描画
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 26px Helvetica Neue, Arial, sans-serif';
     ctx.textAlign = 'center';
@@ -684,8 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const startY = ry + rh / 2 - (lines.length - 1) * 17;
     lines.forEach((line, i) => ctx.fillText(line, 256, startY + i * 34));
 
-    // canvasをCanvasTextureとして直接マテリアルに適用
-    // (A-Frameのsrc属性経由だとiOS Safariでテクスチャが更新されず真っ黒になる)
+    // CanvasTextureを直接マテリアルに適用 (A-Frameのsrc属性経由はiOSで真っ黒になる)
     const mesh = plane.getObject3D('mesh');
     if (mesh) {
       if (!bubbleTextures[id]) {
@@ -723,34 +825,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================
-  // リセット
+  // 起動: 即カメラ → スキャン開始 (ボタン不要の全自動フロー)
   // ==========================================
-
-  function fullReset() {
-    stopScanning();
-    slotImages[0] = slotImages[1] = null;
-    vesselDescriptions[0] = vesselDescriptions[1] = null;
-    spiritNames[0] = spiritNames[1] = null;
-    currentSlot = 0;
-    detectedTarget = null;
-    if (!mediaStream) {
-      startCamera().then(ok => { if (ok) startScanning(); });
-    } else {
-      startScanning();
-    }
-  }
-
-  resetBtn.addEventListener('click', fullReset);
-  // ARフェーズからのやり直しはMindAR/カメラの後始末が絡むためリロードが確実
-  arResetBtn.addEventListener('click', () => location.reload());
 
   window.addEventListener('resize', () => {
     if (isScanning) syncOverlayCanvas();
   });
-
-  // ==========================================
-  // 起動: 即カメラ → 1つ目のスキャン開始
-  // ==========================================
 
   async function init() {
     const started = await startCamera();

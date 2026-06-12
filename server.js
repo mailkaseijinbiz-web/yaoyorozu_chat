@@ -35,7 +35,7 @@ function parseJSONSafe(text) {
 }
 
 // ==========================================
-// 物体検出 + 動的精霊名 (スキャンフェーズ)
+// 物体検出 + 動的精霊名 + キャラ付け (スキャン)
 // ==========================================
 
 const segmentResponseSchema = {
@@ -55,13 +55,22 @@ const segmentResponseSchema = {
             type: 'STRING',
             description: '対象物のカテゴリを表す「◯◯の精霊」形式の精霊名（日本語、10文字以内）。例: 時計なら「時の精霊」、缶・ボトルなら「ドリンクの精霊」、本・ノートなら「知恵の精霊」、コップ・グラスなら「器の精霊」、キーボードなら「タイピングの精霊」。リストにない物体はその本質を捉えた名前を考案する。'
           },
+          personality: {
+            type: 'STRING',
+            description: 'その物体の見た目・用途・状態から発想した精霊のキャラ設定（性格・口調・一人称、50文字以内）。例: 目覚まし時計なら「几帳面でせっかち。一人称は私。語尾は〜である。遅刻に厳しい」、空き缶なら「飲み干されて達観している。一人称は俺。気だるい口調」'
+          },
+          voice: {
+            type: 'STRING',
+            enum: ['cool_male', 'genki_girl', 'wise_elder', 'gentle_lady'],
+            description: 'キャラ設定に合う声質。cool_male=クールな男性声(ガジェット・黒物・スポーティな物向き)、genki_girl=元気なアニメ女声(お菓子・カラフルな物・かわいい物向き)、wise_elder=渋く落ち着いた長老声(本・時計・アンティーク向き)、gentle_lady=おっとり優しい女性声(マグカップ・ぬいぐるみ・植物向き)'
+          },
           box: {
             type: 'ARRAY',
             items: { type: 'INTEGER' },
             description: '[ymin, xmin, ymax, xmax] 0〜1000で規格化されたバウンディングボックス'
           }
         },
-        required: ['name', 'spiritName', 'box']
+        required: ['name', 'spiritName', 'personality', 'voice', 'box']
       }
     }
   },
@@ -69,8 +78,9 @@ const segmentResponseSchema = {
 };
 
 const DEMO_VESSELS = [
-  { name: 'デモの青い器', spiritName: 'ドリンクの精霊' },
-  { name: 'デモの赤い器', spiritName: '時の精霊' }
+  { name: 'デモの青い器', spiritName: 'ドリンクの精霊', personality: '飲み干されて達観している。一人称は俺。気だるい口調', voice: 'cool_male' },
+  { name: 'デモの赤い器', spiritName: '時の精霊', personality: '几帳面でせっかち。一人称は私。語尾は〜である', voice: 'wise_elder' },
+  { name: 'デモの黄色い器', spiritName: 'お菓子の精霊', personality: '甘えん坊でハイテンション。一人称はあたし', voice: 'genki_girl' }
 ];
 let demoSegmentCount = 0;
 
@@ -84,7 +94,7 @@ app.post('/api/segment-vessels', async (req, res) => {
     const demo = DEMO_VESSELS[demoSegmentCount++ % DEMO_VESSELS.length];
     return res.json({
       demo: true,
-      targets: [{ name: demo.name, spiritName: demo.spiritName, box: [200, 200, 800, 800] }]
+      targets: [{ ...demo, box: [200, 200, 800, 800] }]
     });
   }
 
@@ -99,7 +109,11 @@ app.post('/api/segment-vessels', async (req, res) => {
             { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
             {
               text: `画像の中から、ARターゲット（ロゴ、ラベル、または主要な立体物）として認識・追跡するのに最も適した代表的な対象物を1つだけ検出してください。
-バウンディングボックスを [ymin, xmin, ymax, xmax]（0〜1000の整数規格化座標、左上が[0,0]）で指定し、日本語の名前（15文字以内）と、そのモノのカテゴリにふさわしい「◯◯の精霊」形式の精霊名（10文字以内）と共にJSONで返してください。
+バウンディングボックスを [ymin, xmin, ymax, xmax]（0〜1000の整数規格化座標、左上が[0,0]）で指定し、以下と共にJSONで返してください:
+- name: 日本語の名前（15文字以内）
+- spiritName: そのモノのカテゴリにふさわしい「◯◯の精霊」形式の精霊名（10文字以内）
+- personality: その物体の見た目・用途・状態（汚れ、空っぽ、新品など）から発想したユニークなキャラ設定（性格・口調・一人称、50文字以内）
+- voice: キャラに合う声質
 明確な対象物が写っていない場合は targets を空配列にしてください。`
             }
           ]
@@ -121,84 +135,64 @@ app.post('/api/segment-vessels', async (req, res) => {
 });
 
 // ==========================================
-// 精霊同士のBanter (AR会話フェーズ)
+// 精霊同士のBanter (N体対応)
 // ==========================================
 
-const banterResponseSchema = {
-  type: 'OBJECT',
-  properties: {
-    nextSpeaker: {
-      type: 'STRING',
-      enum: ['agent0', 'agent1'],
-      description: '次に発言するエージェントのID'
-    },
-    reply: {
-      type: 'STRING',
-      description: '発言内容。短く自然な日本語のセリフ（1〜2文、最大35文字）'
-    }
-  },
-  required: ['nextSpeaker', 'reply']
-};
+function buildBanterPrompt(spirits, newcomer) {
+  const cast = spirits.map((s, i) =>
+    `【精霊${i} (agent${i})】
+- 精霊名: ${s.name || `精霊${i}`}
+- 宿っている器: ${s.vessel || '不思議な器'}
+- キャラ設定: ${s.personality || '陽気でおしゃべり好き'}`
+  ).join('\n\n');
 
-const BANTER_SYSTEM_PROMPT = `
-あなたは2つの物体の器に宿る精霊同士の掛け合い（会話）を生成するディレクターです。
-登場人物は以下の2人です：
+  return `あなたは複数の物体に宿る精霊たちの、テンポの良い掛け合い（会話）を生成する放送作家です。
+登場精霊は以下の${spirits.length}体です:
 
-【精霊0 (agent0)】
-- 属性: {spirit0}、クール、やれやれ系（だるそうだが話し好き）
-- 口調: 「〜だぜ」「〜だよな」など、少し投げやりでラフな感じ
-- 一人称: 「俺」
-- 現在宿っている器: {vessel0}
-
-【精霊1 (agent1)】
-- 属性: {spirit1}、元気、熱血、フレンドリー、お調子者
-- 口調: 「〜だぞ！」「〜だな！」など、活発でテンションが高い感じ
-- 一人称: 「オイラ」
-- 現在宿っている器: {vessel1}
-
+${cast}
+${newcomer ? `\n※たった今「${newcomer}」が新しく会話に加わった！みんなで歓迎したりツッコんだりすること。\n` : ''}
 これまでの会話履歴を踏まえて、次の発言者（nextSpeaker）と発言内容（reply）を生成してください。
-制約事項：
-1. 発言は必ず短く（1〜2文、35文字以内）、感情豊かに。
-2. お互いの精霊の属性や器（{vessel0} と {vessel1}）の特徴に言及したりツッコミを入れると面白い。（例: ドリンクの精霊なら「飲み干されて空っぽだぜ」、時の精霊なら「時間を刻むのに忙しいんだぞ！」）
-3. 原則として直前の発言者とは異なるエージェントを選び、交互に会話を成立させる。
-4. JSONのみを返却し、前置きや解説は一切出力しない。
-`;
-
-function demoBanterLine(spirit0, spirit1, turn) {
-  const lines = [
-    { nextSpeaker: 'agent0', reply: `俺は${spirit0}。まあ、よろしく頼むぜ` },
-    { nextSpeaker: 'agent1', reply: `オイラは${spirit1}だぞ！会えて嬉しいな！` },
-    { nextSpeaker: 'agent0', reply: 'お前、朝からテンション高すぎだろ…' },
-    { nextSpeaker: 'agent1', reply: 'そっちはダルそうすぎるぞ！シャキッとしろ！' },
-    { nextSpeaker: 'agent0', reply: 'この器、なかなか居心地がいいんだぜ' },
-    { nextSpeaker: 'agent1', reply: 'オイラの器のほうがカッコいいぞ！' }
-  ];
-  return lines[turn % lines.length];
+ルール:
+1. 発言は必ず短く（1〜2文、35文字以内）。テンポ最優先、間延びした説明口調は禁止。
+2. 感情豊かに！感嘆詞（「えっ！？」「おお！」「まったく…」など）や「！」「？」「…」を多用して喜怒哀楽と抑揚をはっきり出す。
+3. 各精霊のキャラ設定（性格・口調・一人称）を厳守する。
+4. 原則として直前の発言者とは異なる精霊を選び、全員に満遍なく話させる。
+5. お互いの器の特徴いじり、ボケとツッコミ、軽い言い合いを歓迎。
+6. JSONのみを返却し、前置きや解説は一切出力しない。`;
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { vessel0, vessel1, spirit0, spirit1, history } = req.body;
+  const { spirits, history, newcomer } = req.body;
+
+  if (!spirits || !Array.isArray(spirits) || spirits.length < 2) {
+    return res.status(400).json({ error: 'At least 2 spirits are required' });
+  }
+
+  const agentIds = spirits.map((_, i) => `agent${i}`);
 
   if (!hasApiKey) {
     const turn = history ? history.length : 0;
-    return res.json({ demo: true, ...demoBanterLine(spirit0 || '青の精霊', spirit1 || '赤の精霊', turn) });
+    const speaker = turn % spirits.length;
+    const demoLines = [
+      `おっ、${spirits[(speaker + 1) % spirits.length].name}じゃないか！元気か？`,
+      `えっ！？急に話しかけるなよ…びっくりするだろ`,
+      `あはは！みんな賑やかだなあ！`
+    ];
+    return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: demoLines[turn % demoLines.length] });
   }
 
   try {
-    const systemPrompt = BANTER_SYSTEM_PROMPT
-      .replace(/{vessel0}/g, vessel0 || '不思議な器')
-      .replace(/{vessel1}/g, vessel1 || '不思議な器')
-      .replace(/{spirit0}/g, spirit0 || '青の精霊')
-      .replace(/{spirit1}/g, spirit1 || '赤の精霊');
+    const systemPrompt = buildBanterPrompt(spirits, newcomer);
 
     let conversation = 'これまでの会話履歴:\n';
     if (history && history.length > 0) {
       history.forEach(h => {
-        const name = h.sender === 'agent0' ? '精霊0' : '精霊1';
+        const idx = parseInt(String(h.sender).replace('agent', ''), 10);
+        const name = (spirits[idx] && spirits[idx].name) || h.sender;
         conversation += `${name}: ${h.text}\n`;
       });
     } else {
-      conversation += '(履歴なし。会話を開始してください。)\n';
+      conversation += '(履歴なし。誰かが勢いよく会話の口火を切ること。)\n';
     }
     conversation += '\n次の会話のターン（発言者とセリフ）を生成してください。';
 
@@ -206,9 +200,23 @@ app.post('/api/banter', async (req, res) => {
       model: 'gemini-2.5-flash',
       contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + conversation }] }],
       config: {
-        temperature: 0.9,
+        temperature: 1.0,
         responseMimeType: 'application/json',
-        responseSchema: banterResponseSchema
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            nextSpeaker: {
+              type: 'STRING',
+              enum: agentIds,
+              description: '次に発言する精霊のID'
+            },
+            reply: {
+              type: 'STRING',
+              description: '発言内容。感情豊かで短い日本語のセリフ（1〜2文、最大35文字）'
+            }
+          },
+          required: ['nextSpeaker', 'reply']
+        }
       }
     });
 
@@ -222,18 +230,20 @@ app.post('/api/banter', async (req, res) => {
 });
 
 // ==========================================
-// ElevenLabs TTS (精霊の声)
+// ElevenLabs TTS (精霊の声 / キャラ別ボイス)
 // ==========================================
 
 const ELEVENLABS_VOICES = {
-  agent0: 'Mv8AjrYZCBkdsmDHNwcB', // 青/クール: Ishibashi (日本語男性)
-  agent1: 'fUjY9K2nAIwlALOwSiwc'  // 赤/元気: Yui (日本語アニメ声)
+  cool_male: 'Mv8AjrYZCBkdsmDHNwcB',   // Ishibashi: クールな日本語男性
+  genki_girl: 'fUjY9K2nAIwlALOwSiwc',  // Yui: 元気な日本語アニメ声
+  wise_elder: 'onwK4e9ZLuTAKqWW03F9',  // Daniel: 渋く落ち着いた低音
+  gentle_lady: 'EXAVITQu4vr4xnSDxMaL'  // Sarah: おっとり柔らかい女性
 };
 
 const hasTtsKey = !!process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY !== 'your_elevenlabs_api_key_here';
 
 app.get('/api/tts', async (req, res) => {
-  const { text, agentId } = req.query;
+  const { text, voice } = req.query;
 
   if (!text) {
     return res.status(400).json({ error: 'Text query parameter is required' });
@@ -242,7 +252,7 @@ app.get('/api/tts', async (req, res) => {
     return res.status(503).json({ error: 'ELEVENLABS_API_KEY is not configured.' });
   }
 
-  const voiceId = (agentId === '1') ? ELEVENLABS_VOICES.agent1 : ELEVENLABS_VOICES.agent0;
+  const voiceId = ELEVENLABS_VOICES[voice] || ELEVENLABS_VOICES.cool_male;
 
   try {
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
@@ -256,8 +266,11 @@ app.get('/api/tts', async (req, res) => {
         text,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75
+          stability: 0.35,        // 低め = 感情表現・抑揚が豊かになる
+          similarity_boost: 0.8,
+          style: 0.6,             // スタイル誇張で演技がかった話し方に
+          use_speaker_boost: true,
+          speed: 1.1              // テンポアップ
         }
       })
     });

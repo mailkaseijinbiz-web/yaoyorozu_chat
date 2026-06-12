@@ -10,9 +10,14 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- ===== スキャンフェーズ ===== -->
-    <div id="scan-container">
-      <video id="camera-feed" autoplay playsinline muted></video>
+    <!-- ARシーン (背面) -->
+    <div id="ar-scene-container"></div>
+
+    <!-- スキャン用カメラ (初期フェーズ) -->
+    <video id="camera-feed" autoplay playsinline muted></video>
+
+    <!-- 共通オーバーレイUI -->
+    <div id="overlay-ui">
       <canvas id="camera-overlay-canvas"></canvas>
 
       <div id="capture-guide">
@@ -22,7 +27,7 @@
         <div class="corner bottom-right"></div>
       </div>
 
-      <div id="guide-text" class="slot-blue">1つ目の器（青の魂）を枠に収めて凝視</div>
+      <div id="guide-text">1体目の器を枠に収めて凝視</div>
 
       <div id="gauge-container">
         <div id="gauge-label">🔮 注入ゲージ <span id="gauge-pct">0%</span></div>
@@ -31,9 +36,8 @@
 
       <div id="scan-status">AIスキャン作動中...</div>
 
-      <div class="scan-controls">
-        <button id="reset-btn" class="sub-btn">🔄 最初からやり直す</button>
-      </div>
+      <div id="transcript" class="hidden"></div>
+      <div id="toast" class="hidden"></div>
     </div>
 
     <!-- 注入フラッシュ -->
@@ -44,17 +48,6 @@
       <div class="spinner"></div>
       <div id="loading-text">魂を抽出中...</div>
     </div>
-
-    <!-- ===== ARフェーズ ===== -->
-    <div id="ar-ui-container" class="hidden">
-      <div id="ar-status">器を探しています...</div>
-      <div id="transcript" class="hidden"></div>
-      <div class="ar-controls">
-        <button id="banter-btn">💬 精霊たちを会話させる</button>
-        <button id="ar-reset-btn" class="sub-btn">🔄 最初からやり直す</button>
-      </div>
-    </div>
-    <div id="ar-scene-container"></div>
 
     <canvas id="snapshot-canvas" style="display:none;"></canvas>
 
