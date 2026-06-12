@@ -685,6 +685,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sys) sys.stop();
       } catch (e) { /* 停止失敗は無視 */ }
     }
+    // MindARがボディやコンテナに自動生成したUIや警告を削除
+    document.querySelectorAll('.mindar-ui-scanning, .mindar-ui-compatibility, mindar-ui-scanning, mindar-ui-compatibility').forEach(el => el.remove());
+    
+    // a-sceneやMindARが作成した追加のvideo/canvas要素を全削除
+    const vids = document.querySelectorAll('body > video, body > canvas');
+    vids.forEach(v => {
+      if (v !== videoElement) {
+        if (v.srcObject) {
+          v.srcObject.getTracks().forEach(t => t.stop());
+        }
+        v.remove();
+      }
+    });
+
     const vid = arSceneContainer.querySelector('video');
     if (vid && vid.srcObject) {
       vid.srcObject.getTracks().forEach(t => t.stop());
@@ -765,7 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </a-entity>`).join('');
 
     arSceneContainer.innerHTML = `
-      <a-scene mindar-image="imageTargetSrc: ${compiledMindUrl}; maxTrack: ${maxTrack}; filterMinCF: 0.0001; filterBeta: 0.001;"
+      <a-scene mindar-image="imageTargetSrc: ${compiledMindUrl}; maxTrack: ${maxTrack}; filterMinCF: 0.0001; filterBeta: 0.001; uiScanning: no; uiLoading: no; uiError: no;"
                color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"
                vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
