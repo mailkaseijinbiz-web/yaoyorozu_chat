@@ -107,12 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateGuideUI() {
     const color = nextColor();
     if (mode === 'scan') {
-      guideText.textContent = `${spirits.length + 1}体目の器を枠に収めて凝視`;
-      scanStatus.textContent = spirits.length === 1 ? 'あと1体で召喚が始まります...' : '精霊を探しています...';
+      guideText.textContent = '精霊を凝視して召喚せよ...';
     } else {
       guideText.textContent = '新しいモノを写すと精霊が増えます';
-      scanStatus.textContent = '';
     }
+    scanStatus.textContent = '';
     guideText.style.borderColor = color;
     guideText.style.boxShadow = `0 0 14px ${color}59`;
     scanLine.style.background = `linear-gradient(90deg, transparent, ${color}, transparent)`;
@@ -249,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         detectedTarget = null;
         clearOverlay();
-        if (mode === 'scan') scanStatus.textContent = '精霊を探しています...';
+        if (mode === 'scan') scanStatus.textContent = '';
         else updateGuideUI();
         resetGaze();
       }
@@ -314,18 +313,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.fillStyle = '#ffffff';
     ctx.textBaseline = 'middle';
     ctx.fillText(labelText, labelX + 8, labelY + labelH / 2);
-
-    // 凝視中は矩形中央に進行率を表示
-    if (progress > 0) {
-      ctx.font = 'bold 30px Helvetica Neue, Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-      ctx.shadowBlur = 8;
-      ctx.fillText(`${Math.round(progress * 100)}%`, rx + rw / 2, ry + rh / 2);
-      ctx.shadowBlur = 0;
-      ctx.textAlign = 'left';
-    }
   }
 
   // ==========================================
