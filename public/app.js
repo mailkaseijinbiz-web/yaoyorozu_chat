@@ -637,6 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
     c.height = 256;
     return c;
   });
+  const bubbleTextures = [null, null];
 
   function showSpeechBubble(id, text) {
     const plane = document.getElementById(`bubble-plane-${id}`);
@@ -683,11 +684,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const startY = ry + rh / 2 - (lines.length - 1) * 17;
     lines.forEach((line, i) => ctx.fillText(line, 256, startY + i * 34));
 
-    // canvasをテクスチャとして適用
-    plane.setAttribute('src', '');
-    plane.setAttribute('src', canvas);
+    // canvasをCanvasTextureとして直接マテリアルに適用
+    // (A-Frameのsrc属性経由だとiOS Safariでテクスチャが更新されず真っ黒になる)
     const mesh = plane.getObject3D('mesh');
-    if (mesh && mesh.material.map) mesh.material.map.needsUpdate = true;
+    if (mesh) {
+      if (!bubbleTextures[id]) {
+        const tex = new THREE.CanvasTexture(canvas);
+        if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+        bubbleTextures[id] = tex;
+      }
+      bubbleTextures[id].needsUpdate = true;
+      mesh.material.map = bubbleTextures[id];
+      mesh.material.transparent = true;
+      mesh.material.needsUpdate = true;
+    }
 
     plane.setAttribute('visible', 'true');
     plane.setAttribute('animation', {
