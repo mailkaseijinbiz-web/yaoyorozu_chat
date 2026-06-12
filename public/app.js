@@ -1,3 +1,20 @@
+// フキダシ用ビルボード: 親(トラッキング対象)がどんな角度でも、常にカメラ正面を向かせて歪みを防ぐ
+AFRAME.registerComponent('billboard', {
+  init() {
+    this.qParent = new THREE.Quaternion();
+    this.qCam = new THREE.Quaternion();
+  },
+  tick() {
+    const cam = this.el.sceneEl.camera;
+    const obj = this.el.object3D;
+    if (!cam || !obj.parent) return;
+    obj.parent.getWorldQuaternion(this.qParent);
+    cam.getWorldQuaternion(this.qCam);
+    // ワールド回転がカメラと一致するよう、親の回転を打ち消す
+    obj.quaternion.copy(this.qParent.invert().multiply(this.qCam));
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   // ===== チューニング用定数 =====
   const GAZE_DURATION = 3000;        // 凝視で注入完了までの時間(ms)
@@ -454,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 凝視ゲージ (3秒で自動注入)
   // ==========================================
 
-  const installingSound = new Audio('soul_installing.mp3'); // 凝視中のチャージ音
+  const installingSound = new Audio('soul_installing.mp3'); // 認識中の音 (認識開始と同時に再生)
 
   function startGaze() {
     if (gazeStartTime !== null) return;
@@ -689,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <a-entity mindar-image-target="targetIndex: ${i}" id="target-entity-${i}">
         <a-ring color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
                 material="shader: flat; transparent: true; opacity: 0.85"></a-ring>
-        <a-plane id="bubble-plane-${i}" position="0 0.85 0.1" width="1.6" height="0.8"
+        <a-plane id="bubble-plane-${i}" position="0 0.85 0.1" width="1.6" height="0.8" billboard
                  material="shader: flat; transparent: true;" visible="false" scale="0 0 0"></a-plane>
       </a-entity>`).join('');
 
