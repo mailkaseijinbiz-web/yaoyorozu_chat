@@ -1,18 +1,28 @@
 // フキダシ用ビルボード: 親(トラッキング対象)がどんな角度でも、常にカメラ正面を向かせて歪みを防ぐ
 AFRAME.registerComponent('billboard', {
   init() {
-    this.qParent = new THREE.Quaternion();
-    this.qCam = new THREE.Quaternion();
-    this.q180 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+    this.camPos = new THREE.Vector3();
+    this.targetPos = new THREE.Vector3();
+    this.qParentInv = new THREE.Quaternion();
   },
   tick() {
     const cam = this.el.sceneEl.camera;
     const obj = this.el.object3D;
     if (!cam || !obj.parent) return;
-    obj.parent.getWorldQuaternion(this.qParent);
-    cam.getWorldQuaternion(this.qCam);
-    // ワールド回転がカメラと一致するよう、親の回転を打ち消し、さらに180度回転して表面を向かせる
-    obj.quaternion.copy(this.qParent.clone().invert().multiply(this.qCam).multiply(this.q180));
+
+    // カメラと吹き出しのワールド座標を取得
+    cam.getWorldPosition(this.camPos);
+    obj.getWorldPosition(this.targetPos);
+
+    // ターゲットからカメラへの方向ベクトル (プレーンの表面Z+が向くべき方向)
+    const dir = new THREE.Vector3().subVectors(this.camPos, this.targetPos).normalize();
+
+    // Z+方向からdirへのワールド回転を計算
+    const qWorld = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+
+    // 親のワールド回転の逆を求めて、ローカル回転に変換
+    obj.parent.getWorldQuaternion(this.qParentInv).invert();
+    obj.quaternion.copy(this.qParentInv.multiply(qWorld));
   }
 });
 
@@ -794,7 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <a-ring id="ring-${i}" color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
                 material="shader: flat; transparent: true; opacity: 0.85" visible="false"></a-ring>
         <a-plane id="bubble-plane-${i}" position="0 0.85 0.1" width="1.6" height="0.8" billboard
-                 material="shader: flat; transparent: true;" visible="false" scale="0 0 0"></a-plane>
+                 material="shader: flat; transparent: true; side: double;" visible="false" scale="0 0 0"></a-plane>
       </a-entity>`).join('');
 
     arSceneContainer.innerHTML = `
