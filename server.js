@@ -11,7 +11,7 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const hasApiKey = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here';
 const ai = hasApiKey ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
@@ -92,6 +92,13 @@ app.post('/api/segment-vessels', async (req, res) => {
     return res.status(400).json({ error: 'Image data is required' });
   }
 
+  // 空/極小の画像（例: 0x0キャンバスの "data:," ）は弾く。
+  // これを通すとAIに無効データを投げてエラーとクォータを浪費し、デモモードでは幻の検出が出る。
+  const base64Data = image.split(',')[1] || image;
+  if (!base64Data || base64Data.length < 100) {
+    return res.status(400).json({ error: 'Image data is empty or too small' });
+  }
+
   if (!hasApiKey) {
     const demo = DEMO_VESSELS[demoSegmentCount];
     demoSegmentCount = (demoSegmentCount + 1) % DEMO_VESSELS.length;
@@ -102,7 +109,6 @@ app.post('/api/segment-vessels', async (req, res) => {
   }
 
   try {
-    const base64Data = image.split(',')[1] || image;
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: [
@@ -289,6 +295,9 @@ app.all('/api/tts', async (req, res) => {
 
   if (!text) {
     return res.status(400).json({ error: 'Text query parameter is required' });
+  }
+  if (typeof text !== 'string' || text.length > 1000) {
+    return res.status(400).json({ error: 'Text must be a string up to 1000 characters' });
   }
   if (!hasTtsKey) {
     return res.status(503).json({ error: 'ELEVENLABS_API_KEY is not configured.' });

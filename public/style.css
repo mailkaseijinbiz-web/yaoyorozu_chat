@@ -56,6 +56,8 @@ html, body {
   transition: opacity 0.4s;
 }
 #capture-guide.subtle { opacity: 0.35; }
+/* 精霊が映っている間は枠を見えなくするが、getBoundingClientRect用にレイアウトは保つ */
+#capture-guide.transparent { opacity: 0; }
 
 .corner {
   position: absolute;
