@@ -814,25 +814,40 @@ document.addEventListener('DOMContentLoaded', () => {
     stopScanning();
     stopBanterLoop();
 
-    loadingOverlay.classList.remove('hidden');
-    loadingText.textContent = 'MindARコンパイル準備中...';
+    // ARが既に動いている場合: コンパイルを先行させてARシーンを見せ続け、
+    // 差し替え直前だけ短時間オーバーレイを出す（3〜8秒のブラックアウトを解消）。
+    // 初回コンパイル(スキャンモード): 従来どおりフルオーバーレイ。
+    const recompile = (mode === 'ar');
 
-    if (mode === 'scan') {
+    if (!recompile) {
+      loadingOverlay.classList.remove('hidden');
+      loadingText.textContent = 'MindARコンパイル準備中...';
       stopCamera();
       videoElement.classList.add('hidden-feed');
+      teardownScene();
+    } else {
+      showToast('✨ 精霊を追加中...');
     }
-    teardownScene();
 
     try {
       const imgs = await Promise.all(spirits.map(s => loadImage(s.image)));
       const compiler = new window.MINDAR.IMAGE.Compiler();
       await compiler.compileImageTargets(imgs, (p) => {
-        loadingText.textContent = '魂を抽出中...';
+        // recompile中はオーバーレイ非表示なのでloadingTextへの書き込みは無害
+        loadingText.textContent = `魂を抽出中... ${Math.round(p * 100)}%`;
       });
       const buffer = await compiler.exportData();
       if (compiledMindUrl) URL.revokeObjectURL(compiledMindUrl);
       compiledMindUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
 
+      // recompile: コンパイル完了後にシーン差し替え (ここだけ瞬時に暗転)
+      if (recompile) {
+        loadingOverlay.classList.remove('hidden');
+        loadingText.textContent = 'ARシーンを更新中...';
+        teardownScene();
+      }
+
+      arReadyFired = false;
       buildScene();
       const sceneEl = arSceneContainer.querySelector('a-scene');
       await new Promise((resolve) => {
@@ -850,8 +865,8 @@ document.addEventListener('DOMContentLoaded', () => {
       loadingOverlay.classList.add('hidden');
       setupTargetListeners();
       modeToggle.classList.remove('hidden');
-      setUIMode('banter');       // 会話モードへ切替 (スキャンUIを隠す)
-      startBanter(newcomerName); // 会話は自動で開始
+      setUIMode('banter');
+      startBanter(newcomerName);
     } catch (err) {
       console.error('Compilation error:', err);
       isCompiling = false;
@@ -869,8 +884,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // 復旧できない場合はスキャンモードへ安全に戻す。失敗時はモードに関わらずカメラを必ず生かす。
-      // AR中(mode==='ar')の失敗ではteardownSceneでARカメラを停止済みのため、
-      // ここでカメラを再開しないと画面が固まる(文鎮化)。
       showToast('ARコンパイルに失敗しました。再スキャンします…');
       teardownScene();
       mode = 'scan';
