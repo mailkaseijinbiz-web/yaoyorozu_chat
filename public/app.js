@@ -961,7 +961,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.error || !data.reply) return { data };
         const local = parseInt(String(data.nextSpeaker).replace('agent', ''), 10);
         const globalIdx = participants[Number.isInteger(local) ? local : 0] ?? participants[0];
-        const audioP = fetchTTS(globalIdx, data.reply)
+        const speechText = data.ttsReply || data.reply;
+        const audioP = fetchTTS(globalIdx, speechText)
           .then(r => (r.ok ? r.blob() : null))
           .catch(() => null);
         return { data, globalIdx, audioP };

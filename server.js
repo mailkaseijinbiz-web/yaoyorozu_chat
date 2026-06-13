@@ -176,12 +176,14 @@ app.post('/api/banter', async (req, res) => {
   if (!hasApiKey) {
     const turn = history ? history.length : 0;
     const speaker = turn % spirits.length;
+    const targetName = spirits[(speaker + 1) % spirits.length].name;
     const demoLines = [
-      `おっ、${spirits[(speaker + 1) % spirits.length].name}じゃないか！元気か？`,
-      `えっ！？急に話しかけるなよ…びっくりするだろ`,
-      `あはは！みんな賑やかだなあ！`
+      { reply: `おっ、${targetName}じゃないか！元気か？`, ttsReply: `おっ、${targetName}じゃないか！げんきか？` },
+      { reply: `えっ！？急に話しかけるなよ…びっくりするだろ`, ttsReply: `えっ！？きゅうにはなしかけるなよ…びっくりするだろ` },
+      { reply: `あはは！みんな賑やかだなあ！`, ttsReply: `あはは！みんなにぎやかだなあ！` }
     ];
-    return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: demoLines[turn % demoLines.length] });
+    const line = demoLines[turn % demoLines.length];
+    return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: line.reply, ttsReply: line.ttsReply });
   }
 
   try {
@@ -220,9 +222,13 @@ app.post('/api/banter', async (req, res) => {
             reply: {
               type: 'STRING',
               description: '発言内容。感情豊かで短い日本語のセリフ（1〜2文、最大35文字）'
+            },
+            ttsReply: {
+              type: 'STRING',
+              description: 'TTS(音声読み上げ)用のテキスト。漢字を一切使わず、すべて「ひらがな」「カタカナ」と「スペース」のみで正しい発音・読み方を再現すること（例:「時の精霊」→「ときのせいれい」、「器」→「うつわ」、「Gemini」→「じぇみに」）。「！」「？」などは含めてよい。'
             }
           },
-          required: ['nextSpeaker', 'reply']
+          required: ['nextSpeaker', 'reply', 'ttsReply']
         }
       }
     });
