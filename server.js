@@ -45,7 +45,7 @@ const segmentResponseSchema = {
   properties: {
     targets: {
       type: 'ARRAY',
-      description: '画像内で最も代表的な対象物（最大1つ）。適切な対象物がなければ空配列。',
+      description: '画像内でARターゲットとして適した対象物（最大3つ）。適切な対象物がなければ空配列。',
       items: {
         type: 'OBJECT',
         properties: {
@@ -117,13 +117,12 @@ app.post('/api/segment-vessels', async (req, res) => {
           parts: [
             { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
             {
-              text: `画像の中から、ARターゲット（ロゴ、ラベル、または主要な立体物）として認識・追跡するのに最も適した代表的な対象物を1つだけ検出してください。
-バウンディングボックスを [ymin, xmin, ymax, xmax]（0〜1000の整数規格化座標、左上が[0,0]）で指定し、以下と共にJSONで返してください:
+              text: `画像の中から、ARターゲット（ロゴ、ラベル、または主要な立体物）として認識・追跡するのに適した対象物を最大3つまで検出してください。対象物が複数ある場合はすべて列挙し、なければ空配列にしてください。
+各対象物のバウンディングボックスを [ymin, xmin, ymax, xmax]（0〜1000の整数規格化座標、左上が[0,0]）で指定し、以下と共にJSONで返してください:
 - name: 日本語の名前（15文字以内）
 - spiritName: そのモノのカテゴリにふさわしい「◯◯の精霊」形式の精霊名（10文字以内）
 - personality: その物体の見た目・用途・状態（汚れ、空っぽ、新品など）から発想したユニークなキャラ設定（性格・口調・一人称、50文字以内）
-- voice: キャラに合う声質
-明確な対象物が写っていない場合は targets を空配列にしてください。`
+- voice: キャラに合う声質`
             }
           ]
         }
@@ -315,7 +314,7 @@ app.all('/api/tts', async (req, res) => {
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_multilingual_v2',
+        model_id: 'eleven_turbo_v2_5',
         voice_settings: {
           stability: 0.35,        // 低め = 感情表現・抑揚が豊かになる
           similarity_boost: 0.8,

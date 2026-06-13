@@ -245,3 +245,28 @@ html, body {
   background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(124,77,255,0.35));
   border-radius: 28px;
 }
+
+/* ===== リセットボタン ===== */
+#reset-btn {
+  position: absolute;
+  bottom: 7%;
+  right: 16px;
+  z-index: 25;
+  pointer-events: auto;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(11, 15, 25, 0.80);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 30px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color 0.2s, border-color 0.2s;
+}
+#reset-btn.confirm {
+  color: rgba(255, 82, 82, 0.9);
+  border-color: rgba(255, 82, 82, 0.5);
+}

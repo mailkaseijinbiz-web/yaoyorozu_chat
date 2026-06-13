@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modeToggle = document.getElementById('mode-toggle');
   const modeScanBtn = document.getElementById('mode-scan-btn');
   const modeBanterBtn = document.getElementById('mode-banter-btn');
+  const resetBtn = document.getElementById('reset-btn');
 
   // ===== 状態 =====
   let currentSituation = null;
@@ -730,6 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast(newNames.length === 1
         ? `✨ ${newNames[0]}が宿った！`
         : `✨ ${newNames.join('・')}が宿った！`);
+      resetBtn.classList.remove('hidden');
 
       if (spirits.length >= 2) {
         // ARが既に動いていた(prevCount >= 2)なら最後の新参精霊を途中参加として通知
@@ -927,6 +929,10 @@ document.addEventListener('DOMContentLoaded', () => {
         visibleTargets.add(i);
         scanStatus.textContent = `${spirit.name}がここにいます`;
         updateScanGuideVisibility();
+        // 2体以上映ったら即バンター開始 (arReadyタイムアウト後もここで確実にトリガー)
+        if (visibleTargets.size >= 2 && !isBanterRunning && mode === 'ar' && uiMode === 'banter') {
+          startBanter(null);
+        }
       });
       el.addEventListener('targetLost', () => {
         visibleTargets.delete(i);
@@ -1316,6 +1322,67 @@ document.addEventListener('DOMContentLoaded', () => {
       startBanter();
     }
   });
+
+  // ===== リセットボタン (2回タップで確定) =====
+  let resetConfirmTimer = null;
+
+  resetBtn.addEventListener('click', () => {
+    if (resetConfirmTimer) {
+      clearTimeout(resetConfirmTimer);
+      resetConfirmTimer = null;
+      resetBtn.classList.remove('confirm');
+      executeReset();
+      return;
+    }
+    resetBtn.classList.add('confirm');
+    resetBtn.textContent = '確定？';
+    resetConfirmTimer = setTimeout(() => {
+      resetConfirmTimer = null;
+      resetBtn.classList.remove('confirm');
+      resetBtn.textContent = 'リセット';
+    }, 2000);
+  });
+
+  function executeReset() {
+    stopBanterLoop();
+    stopScanning();
+    teardownScene();
+    stopCamera();
+
+    spirits.length = 0;
+    visibleTargets.clear();
+    banterHistory = [];
+    newcomerToAnnounce = null;
+    currentSituation = null;
+    pendingTurn = null;
+    detectedTargets = [];
+    isCompiling = false;
+    arReadyFired = false;
+    banterTurns = 0;
+    lastBanterErr = '—';
+    if (compiledMindUrl) { URL.revokeObjectURL(compiledMindUrl); compiledMindUrl = null; }
+
+    mode = 'scan';
+    uiMode = 'scan';
+    activeVideo = videoElement;
+
+    resetBtn.textContent = 'リセット';
+    resetBtn.classList.add('hidden');
+    modeToggle.classList.add('hidden');
+    videoElement.classList.remove('hidden-feed');
+    modeScanBtn.classList.add('active');
+    modeBanterBtn.classList.remove('active');
+    captureGuide.classList.remove('hidden');
+    captureGuide.classList.remove('subtle');
+    captureGuide.classList.remove('transparent');
+    guideText.classList.remove('hidden');
+    guideText.textContent = '精霊を凝視して召喚せよ...';
+    scanStatus.textContent = '';
+    clearOverlay();
+    resetGaze();
+
+    startCamera().then(ok => { if (ok) startScanning(); });
+  }
 
   // ==========================================
   // 起動: カメラ即時開始・音声は初回タップでアンロック
