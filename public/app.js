@@ -912,6 +912,13 @@ document.addEventListener('DOMContentLoaded', () => {
     arSceneContainer.innerHTML = '';
     visibleTargets.clear();
     arVideo = null;
+
+    // 旧WebGLコンテキストに紐づいたテクスチャキャッシュを破棄する。
+    // シーン再構築後は新コンテキストで新テクスチャを生成しないと吹き出しが描画されない。
+    bubbleHideTimers.forEach(t => t && clearTimeout(t));
+    bubbleCanvases.length = 0;
+    bubbleTextures.length = 0;
+    bubbleHideTimers.length = 0;
   }
 
   async function enterAR(newcomerName, isRetry = false) {
@@ -1353,17 +1360,26 @@ document.addEventListener('DOMContentLoaded', () => {
     lines.forEach((line, i) => ctx.fillText(line, 256, startY + i * 34));
 
     // CanvasTextureを直接マテリアルに適用 (A-Frameのsrc属性経由はiOSで真っ黒になる)
-    const mesh = plane.getObject3D('mesh');
-    if (mesh) {
+    const applyTex = (m) => {
       if (!bubbleTextures[id]) {
         const tex = new THREE.CanvasTexture(canvas);
         if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
         bubbleTextures[id] = tex;
       }
       bubbleTextures[id].needsUpdate = true;
-      mesh.material.map = bubbleTextures[id];
-      mesh.material.transparent = true;
-      mesh.material.needsUpdate = true;
+      m.material.map = bubbleTextures[id];
+      m.material.transparent = true;
+      m.material.needsUpdate = true;
+    };
+    const mesh = plane.getObject3D('mesh');
+    if (mesh) {
+      applyTex(mesh);
+    } else {
+      // arReady後でもエンティティ初期化が1フレーム遅れる場合があるため再試行
+      requestAnimationFrame(() => {
+        const m = plane.getObject3D('mesh');
+        if (m) applyTex(m);
+      });
     }
 
     plane.setAttribute('visible', 'true');
