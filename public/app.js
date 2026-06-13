@@ -1039,17 +1039,22 @@ document.addEventListener('DOMContentLoaded', () => {
         visibleTargets.add(i);
         scanStatus.textContent = `${spirit.name}がここにいます`;
         updateScanGuideVisibility();
-        // 2体以上映ったら即バンター開始 (arReadyタイムアウト後もここで確実にトリガー)
-        if (visibleTargets.size >= 2 && !isBanterRunning && mode === 'ar' && uiMode === 'banter') {
-          startBanter(null);
+        // 2体以上映ったら会話タブへ自動切替＆バンター開始
+        if (mode === 'ar' && visibleTargets.size >= 2) {
+          if (uiMode !== 'banter') setUIMode('banter');
+          if (!isBanterRunning) startBanter(null);
         }
       });
       el.addEventListener('targetLost', () => {
         visibleTargets.delete(i);
-        // 画面外に出たら会話・マーカーを止める
+        // 画面外に出たら吹き出し・マーカーを消す
         hideSpeechBubble(i);
         if (visibleTargets.size === 0) scanStatus.textContent = '';
         updateScanGuideVisibility();
+        // 1体以下になったらスキャンタブへ自動切替
+        if (mode === 'ar' && visibleTargets.size < 2 && uiMode === 'banter') {
+          setUIMode('scan');
+        }
       });
     });
   }
