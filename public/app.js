@@ -579,6 +579,10 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(gazeInterval);
       gazeInterval = null;
     }
+    detectedTarget = null;
+    detectedColor = null;
+    detectedSig = null;
+    clearOverlay();
     updateScanLine();
   }
 
@@ -619,6 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (sum / gray.length > MOTION_THRESHOLD && gazeStartTime !== null) {
         resetGaze();
         scanStatus.textContent = '視線が逸れました — ゲージをリセット';
+        if (mode === 'ar') updateGuideUI();
       }
     }
     prevMotionFrame = gray;
