@@ -48,8 +48,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const snapshotCanvas = document.getElementById('snapshot-canvas');
   const arSceneContainer = document.getElementById('ar-scene-container');
   const toastDiv = document.getElementById('toast');
+  const arControls = document.getElementById('ar-controls');
+  const restartBanterBtn = document.getElementById('restart-banter-btn');
 
   // ===== 状態 =====
+  let currentSituation = null;
+  const SITUATIONS = [
+    { location: 'リビングルーム', weather: '窓の外はどしゃ降りの雨' },
+    { location: '静かな公園のベンチ', weather: '木漏れ日が心地よい晴天' },
+    { location: 'お洒落なカフェのテラス席', weather: '少し風が強い曇り空' },
+    { location: 'ごちゃごちゃした作業机の上', weather: '夕暮れ時の淡い西日' },
+    { location: '真夜中の書斎', weather: '冷たい風が吹く星空' }
+  ];
   let mode = 'scan'; // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
   const spirits = []; // {image, vessel, name, personality, voice, color}
 
@@ -952,7 +962,8 @@ document.addEventListener('DOMContentLoaded', () => {
         name: spirits[i].name, vessel: spirits[i].vessel, personality: spirits[i].personality
       })),
       history: filteredHistory,
-      newcomer: newcomerToAnnounce
+      newcomer: newcomerToAnnounce,
+      situation: currentSituation
     });
     newcomerToAnnounce = null;
 
@@ -980,6 +991,12 @@ document.addEventListener('DOMContentLoaded', () => {
     isBanterRunning = true;
     pendingTurn = null;
     newcomerToAnnounce = newcomerName || null;
+    
+    // シチュエーションをランダムに決定
+    currentSituation = SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
+    console.log('Current Situation:', currentSituation);
+
+    arControls.classList.add('hidden'); // 会話開始時に再開ボタンを隠す
     runBanterTurn(banterSession);
   }
 
@@ -1027,8 +1044,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (banterHistory.length > 15) banterHistory.shift();
 
     // 再生中に次のターンを先読み（現在映っている参加者で）してテンポを上げる
+    // ただし、これが終了ターンの場合は次のターンを先読みしない
     const nextVisible = visibleSpiritIndices();
-    pendingTurn = nextVisible.length >= 2 ? fetchTurn(nextVisible) : null;
+    const isEnding = turn.data.isEnd === true;
+    pendingTurn = (nextVisible.length >= 2 && !isEnding) ? fetchTurn(nextVisible) : null;
 
     spirits.forEach((_, i) => { if (i !== idx) hideSpeechBubble(i); });
     showSpeechBubble(idx, turn.data.reply);
@@ -1038,8 +1057,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     playLine(blob, (spoke) => {
       if (!isBanterRunning || session !== banterSession) return;
-      const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + turn.data.reply.length * 90);
-      banterTimeout = setTimeout(() => runBanterTurn(session), delay);
+      if (isEnding) {
+        isBanterRunning = false;
+        // 3.5秒後に吹き出しを消し、再開ボタンを表示
+        setTimeout(() => {
+          spirits.forEach((_, i) => hideSpeechBubble(i));
+          arControls.classList.remove('hidden');
+        }, 3500);
+      } else {
+        const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + turn.data.reply.length * 90);
+        banterTimeout = setTimeout(() => runBanterTurn(session), delay);
+      }
     });
   }
 
@@ -1176,5 +1204,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const started = await startCamera();
     if (started) startScanning();
     enableTapFreeAudio();
+  });
+
+  restartBanterBtn.addEventListener('click', () => {
+    banterHistory = [];
+    startBanter();
   });
 });

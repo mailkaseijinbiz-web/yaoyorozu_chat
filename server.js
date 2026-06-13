@@ -141,7 +141,7 @@ app.post('/api/segment-vessels', async (req, res) => {
 // 精霊同士のBanter (N体対応)
 // ==========================================
 
-function buildBanterPrompt(spirits, newcomer) {
+function buildBanterPrompt(spirits, newcomer, turnCount, situation) {
   const cast = spirits.map((s, i) =>
     `【精霊${i} (agent${i})】
 - 精霊名: ${s.name || `精霊${i}`}
@@ -149,45 +149,69 @@ function buildBanterPrompt(spirits, newcomer) {
 - キャラ設定: ${s.personality || '陽気でおしゃべり好き'}`
   ).join('\n\n');
 
-  return `あなたは複数の物体に宿る精霊たちの、テンポの良い掛け合い（会話）を生成する放送作家です。
+  const sitText = situation 
+    ? `現在のシチュエーション:\n- 場所: ${situation.location || '部屋の中'}\n- 天気・時間: ${situation.weather || '晴れ'}`
+    : '';
+
+  // ターン数に応じた起承転結フェーズの指定
+  let phaseInstruction = "";
+  if (turnCount <= 2) {
+    phaseInstruction = "【起】会話の導入です。お互いの器を自己紹介しつつ、現在のシチュエーション（場所や天気）への言及を交えて、ユーモアたっぷりにスタートしてください。";
+  } else if (turnCount <= 5) {
+    phaseInstruction = "【承】会話の展開です。彼らの器の「共通点（または対立点）」や「関係性」にフォーカスした話題を1つ見つけ、それをテーマにして相手をいじり合ったり、漫才風のボケとツッコミを展開してください。";
+  } else if (turnCount <= 8) {
+    phaseInstruction = "【転】ボケとツッコミをさらに加速させ、話の核心や予期せぬユーモラスなボケをぶつけて大きく盛り上げてください。";
+  } else {
+    phaseInstruction = "【結】会話のオチ（締めくくり）です。漫才の終わりのように、ユーモラスなオチをつけて会話を綺麗に締めくくってください（例：「もうええわ！」「いい加減にしろ！」などで締める）。この発言で会話を終了させるため、JSONの isEnd を true にしてください。";
+  }
+
+  return `あなたは複数の物体に宿る精霊たちの、テンポの良い漫才のような掛け合い（会話）を構成する優秀な放送作家です。
 登場精霊は以下の${spirits.length}体です:
 
 ${cast}
 ${newcomer ? `\n※たった今「${newcomer}」が新しく会話に加わった！みんなで歓迎したりツッコんだりすること。\n` : ''}
-これまでの会話履歴を踏まえて、次の発言者（nextSpeaker）と発言内容（reply）を生成してください。
+
+${sitText}
+
+現在の会話フェーズ: ${phaseInstruction}
+
+これまでの会話履歴を踏まえて、次の発言者（nextSpeaker）、発言内容（reply）、よみがな（ttsReply）、そして会話を終了するかどうか（isEnd）を決定してください。
+
 ルール:
 1. 発言は必ず短く（1〜2文、35文字以内）。テンポ最優先、間延びした説明口調は禁止。
-2. 感情豊かに！感嘆詞（「えっ！？」「おお！」「まったく…」など）や「！」「？」「…」を多用して喜怒哀楽と抑揚をはっきり出す。
-3. 各精霊のキャラ設定（性格・口調・一人称）を厳守する。
-4. 原則として直前の発言者とは異なる精霊を選び、全員に満遍なく話させる。
-5. お互いの器の特徴いじり、ボケとツッコミ、軽い言い合いを歓迎。
-6. JSONのみを返却し、前置きや解説は一切出力しない。`;
+2. ユーモアにあふれ、漫才のようなツッコミとボケの応酬にすること。
+3. 宿っている器の共通する特徴やテーマを、精霊同士で面白おかしく突っつき合うこと。
+4. 場所や天気（シチュエーション）に合わせた言及やぼやきを会話に自然に織り交ぜること。
+5. 感情豊かに！感嘆詞や「！」「？」「…」を多用して喜怒哀楽と抑揚をはっきり出す。
+6. 各精霊のキャラ設定（性格・口調・一人称）を厳守する。
+7. isEnd は、会話をオチをつけて締めくくる最後の発言でのみ true にしてください。それ以外は必ず false にすること。
+8. JSONのみを返却し、前置きや解説は一切出力しない。`;
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { spirits, history, newcomer } = req.body;
+  const { spirits, history, newcomer, situation } = req.body;
 
   if (!spirits || !Array.isArray(spirits) || spirits.length < 2) {
     return res.status(400).json({ error: 'At least 2 spirits are required' });
   }
 
   const agentIds = spirits.map((_, i) => `agent${i}`);
+  const turnCount = history ? history.length : 0;
 
   if (!hasApiKey) {
-    const turn = history ? history.length : 0;
-    const speaker = turn % spirits.length;
+    const speaker = turnCount % spirits.length;
     const targetName = spirits[(speaker + 1) % spirits.length].name;
     const demoLines = [
-      { reply: `おっ、${targetName}じゃないか！元気か？`, ttsReply: `おっ、${targetName}じゃないか！げんきか？` },
-      { reply: `えっ！？急に話しかけるなよ…びっくりするだろ`, ttsReply: `えっ！？きゅうにはなしかけるなよ…びっくりするだろ` },
-      { reply: `あはは！みんな賑やかだなあ！`, ttsReply: `あはは！みんなにぎやかだなあ！` }
+      { reply: `おっ、${targetName}じゃないか！元気か？`, ttsReply: `おっ、${targetName}じゃないか！げんきか？`, isEnd: false },
+      { reply: `えっ！？急に話しかけるなよ…びっくりするだろ`, ttsReply: `えっ！？きゅうにはなしかけるなよ…びっくりするだろ`, isEnd: false },
+      { reply: `あはは！もうええわ！ありがとうございました！`, ttsReply: `あはは！もうええわ！ありがとうございました！`, isEnd: true }
     ];
-    const line = demoLines[turn % demoLines.length];
-    return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: line.reply, ttsReply: line.ttsReply });
+    const line = demoLines[turnCount % demoLines.length];
+    return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: line.reply, ttsReply: line.ttsReply, isEnd: line.isEnd });
   }
 
   try {
-    const systemPrompt = buildBanterPrompt(spirits, newcomer);
+    const systemPrompt = buildBanterPrompt(spirits, newcomer, turnCount, situation);
 
     let conversation = 'これまでの会話履歴:\n';
     if (history && history.length > 0) {
@@ -226,9 +250,13 @@ app.post('/api/banter', async (req, res) => {
             ttsReply: {
               type: 'STRING',
               description: 'TTS(音声読み上げ)用のテキスト。漢字を一切使わず、すべて「ひらがな」「カタカナ」と「スペース」のみで正しい発音・読み方を再現すること（例:「時の精霊」→「ときのせいれい」、「器」→「うつわ」、「Gemini」→「じぇみに」）。「！」「？」などは含めてよい。'
+            },
+            isEnd: {
+              type: 'BOOLEAN',
+              description: 'これが会話のオチ（最後の発言）であり、会話を終了する場合は true。それ以外は false。'
             }
           },
-          required: ['nextSpeaker', 'reply', 'ttsReply']
+          required: ['nextSpeaker', 'reply', 'ttsReply', 'isEnd']
         }
       }
     });

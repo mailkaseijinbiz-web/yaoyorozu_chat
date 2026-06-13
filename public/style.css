@@ -244,3 +244,31 @@ html, body {
   transform: scale(0.96);
   box-shadow: 0 4px 10px rgba(124, 77, 255, 0.3);
 }
+
+/* ===== ARコントロールボタン ===== */
+#ar-controls {
+  position: absolute;
+  bottom: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  pointer-events: auto;
+}
+#restart-banter-btn {
+  background: rgba(11, 15, 25, 0.85);
+  border: 2px solid #7c4dff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 12px 24px;
+  border-radius: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 77, 255, 0.3);
+  transition: transform 0.2s, background 0.2s;
+  outline: none;
+  white-space: nowrap;
+}
+#restart-banter-btn:active {
+  transform: scale(0.95);
+  background: #7c4dff;
+}
