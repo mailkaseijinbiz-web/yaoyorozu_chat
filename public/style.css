@@ -246,6 +246,132 @@ html, body {
   border-radius: 28px;
 }
 
+/* ===== 精霊カウントボタン ===== */
+#spirit-count-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  pointer-events: auto;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(11, 15, 25, 0.80);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* ===== 精霊一覧パネル ===== */
+#spirit-panel {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  align-items: flex-end;
+}
+#spirit-panel.open {
+  display: flex;
+}
+#spirit-panel-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+#spirit-panel-sheet {
+  position: relative;
+  width: 100%;
+  max-height: 72vh;
+  background: rgba(11, 15, 25, 0.97);
+  border-radius: 20px 20px 0 0;
+  padding: 0 16px 40px;
+  overflow-y: auto;
+  animation: panel-slide-up 0.3s ease-out;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+@keyframes panel-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.spirit-panel-handle {
+  width: 40px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  margin: 14px auto 18px;
+}
+.spirit-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.9);
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 4px;
+}
+#spirit-panel-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.spirit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.spirit-thumb {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2.5px solid;
+  flex-shrink: 0;
+}
+.spirit-info {
+  flex: 1;
+  min-width: 0;
+}
+.spirit-name {
+  font-size: 14px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spirit-vessel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.42);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spirit-delete-btn {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: bold;
+  color: rgba(255, 82, 82, 0.85);
+  background: rgba(255, 82, 82, 0.08);
+  border: 1px solid rgba(255, 82, 82, 0.28);
+  border-radius: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ===== リセットボタン ===== */
 #reset-btn {
   position: absolute;

@@ -41,6 +41,10 @@
 
       <div id="toast" class="hidden"></div>
 
+      <button id="spirit-count-btn" class="hidden">
+        <span id="spirit-count-num">0</span>体の精霊
+      </button>
+
       <div id="mode-toggle" class="hidden">
         <button id="mode-scan-btn" class="mode-btn active">スキャン</button>
         <button id="mode-banter-btn" class="mode-btn">会話</button>
@@ -56,6 +60,19 @@
     <div id="loading-overlay" class="hidden">
       <div class="spinner"></div>
       <div id="loading-text">魂を抽出中...</div>
+    </div>
+
+    <!-- 精霊一覧パネル -->
+    <div id="spirit-panel">
+      <div id="spirit-panel-backdrop"></div>
+      <div id="spirit-panel-sheet">
+        <div class="spirit-panel-handle"></div>
+        <div class="spirit-panel-title">
+          召喚した精霊 <span id="spirit-panel-count">0</span>体
+          <button id="spirit-panel-close">✕</button>
+        </div>
+        <div id="spirit-list"></div>
+      </div>
     </div>
 
     <canvas id="snapshot-canvas" style="display:none;"></canvas>

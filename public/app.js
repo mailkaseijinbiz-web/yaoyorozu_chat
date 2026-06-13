@@ -32,6 +32,7 @@ AFRAME.registerComponent('billboard', {
 
 document.addEventListener('DOMContentLoaded', () => {
   // ===== チューニング用定数 =====
+  const SPIRIT_STORAGE_KEY = 'ar_agents_2_spirits';
   const GAZE_DURATION = 2000;        // 凝視で注入完了までの時間(ms)
   const SCAN_INTERVAL = 700;         // AIスキャン(物体検出)の間隔(ms)
   const MOTION_CHECK_INTERVAL = 150; // カメラぶれ検知の間隔(ms)
@@ -56,6 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const modeScanBtn = document.getElementById('mode-scan-btn');
   const modeBanterBtn = document.getElementById('mode-banter-btn');
   const resetBtn = document.getElementById('reset-btn');
+  const spiritCountBtn = document.getElementById('spirit-count-btn');
+  const spiritCountNum = document.getElementById('spirit-count-num');
+  const spiritPanel = document.getElementById('spirit-panel');
+  const spiritPanelCount = document.getElementById('spirit-panel-count');
 
   // ===== 状態 =====
   let currentSituation = null;
@@ -93,6 +98,102 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let compiledMindUrl = null;
   const visibleTargets = new Set();
+
+  // ==========================================
+  // 精霊の永続化 (LocalStorage)
+  // ==========================================
+
+  function saveSpirits() {
+    try {
+      localStorage.setItem(SPIRIT_STORAGE_KEY, JSON.stringify(
+        spirits.map(s => ({ ...s, sig: s.sig ? Array.from(s.sig) : null }))
+      ));
+    } catch (e) {
+      console.warn('Spirit save failed:', e);
+    }
+  }
+
+  function loadSpirits() {
+    try {
+      const raw = localStorage.getItem(SPIRIT_STORAGE_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw).map(s => ({ ...s, sig: s.sig ? new Float32Array(s.sig) : null }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function updateSpiritCountBtn() {
+    spiritCountNum.textContent = spirits.length;
+    spiritCountBtn.classList.toggle('hidden', spirits.length === 0);
+  }
+
+  // ==========================================
+  // 精霊一覧パネル
+  // ==========================================
+
+  function openSpiritPanel() {
+    renderSpiritPanel();
+    spiritPanel.classList.add('open');
+  }
+
+  function closeSpiritPanel() {
+    spiritPanel.classList.remove('open');
+  }
+
+  function renderSpiritPanel() {
+    const list = document.getElementById('spirit-list');
+    spiritPanelCount.textContent = spirits.length;
+    list.innerHTML = '';
+    spirits.forEach((spirit, idx) => {
+      const row = document.createElement('div');
+      row.className = 'spirit-row';
+      row.innerHTML = `
+        <img class="spirit-thumb" src="${spirit.image}" style="border-color:${spirit.color}">
+        <div class="spirit-info">
+          <div class="spirit-name">${spirit.name}</div>
+          <div class="spirit-vessel">${spirit.vessel}</div>
+        </div>
+        <button class="spirit-delete-btn" data-idx="${idx}">解放</button>
+      `;
+      list.appendChild(row);
+    });
+    list.querySelectorAll('.spirit-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteSpirit(parseInt(btn.dataset.idx)));
+    });
+  }
+
+  async function deleteSpirit(idx) {
+    closeSpiritPanel();
+    spirits.splice(idx, 1);
+    saveSpirits();
+    updateSpiritCountBtn();
+
+    if (spirits.length === 0) {
+      executeReset();
+      return;
+    }
+
+    if (spirits.length === 1) {
+      stopBanterLoop();
+      teardownScene();
+      mode = 'scan';
+      activeVideo = videoElement;
+      videoElement.classList.remove('hidden-feed');
+      modeToggle.classList.add('hidden');
+      setUIMode('scan');
+      const ok = await startCamera();
+      if (ok) startScanning();
+      showToast('精霊が1体に。もう1体見つけてください');
+      return;
+    }
+
+    await enterAR(null);
+  }
+
+  spiritCountBtn.addEventListener('click', openSpiritPanel);
+  document.getElementById('spirit-panel-backdrop').addEventListener('click', closeSpiritPanel);
+  document.getElementById('spirit-panel-close').addEventListener('click', closeSpiritPanel);
 
   // ==========================================
   // トースト通知
@@ -731,6 +832,8 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast(newNames.length === 1
         ? `✨ ${newNames[0]}が宿った！`
         : `✨ ${newNames.join('・')}が宿った！`);
+      saveSpirits();
+      updateSpiritCountBtn();
       resetBtn.classList.remove('hidden');
 
       if (spirits.length >= 2) {
@@ -828,7 +931,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoElement.classList.add('hidden-feed');
       teardownScene();
     } else {
-      showToast('✨ 精霊を追加中...');
+      showToast(newcomerName ? `✨ ${newcomerName}を召喚中...` : 'ARシーンを更新中...');
     }
 
     try {
@@ -1361,6 +1464,7 @@ document.addEventListener('DOMContentLoaded', () => {
     banterTurns = 0;
     lastBanterErr = '—';
     if (compiledMindUrl) { URL.revokeObjectURL(compiledMindUrl); compiledMindUrl = null; }
+    localStorage.removeItem(SPIRIT_STORAGE_KEY);
 
     mode = 'scan';
     uiMode = 'scan';
@@ -1369,6 +1473,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resetBtn.textContent = 'リセット';
     resetBtn.classList.add('hidden');
     modeToggle.classList.add('hidden');
+    updateSpiritCountBtn();
     videoElement.classList.remove('hidden-feed');
     modeScanBtn.classList.add('active');
     modeBanterBtn.classList.remove('active');
@@ -1411,8 +1516,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 200);
 
   (async () => {
+    // 前回の精霊をLocalStorageから復元
+    const saved = loadSpirits();
+    if (saved.length > 0) {
+      spirits.push(...saved);
+      updateSpiritCountBtn();
+      resetBtn.classList.remove('hidden');
+    }
+
     const started = await startCamera();
-    if (started) startScanning();
+    if (!started) return;
+
+    if (spirits.length >= 2) {
+      showToast(`✨ ${spirits.length}体の精霊を復元しました`);
+      await enterAR(null);
+    } else {
+      if (spirits.length === 1) showToast(`✨ ${spirits[0].name}を復元。もう1体見つけてください`);
+      startScanning();
+    }
   })();
 
   // ===== Service Worker: アップデート検知 =====
