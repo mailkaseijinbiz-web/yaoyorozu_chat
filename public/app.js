@@ -67,6 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
   let mode = 'scan';    // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
   let uiMode = 'scan'; // 'scan' (スキャンUI表示) | 'banter' (会話鑑賞)
+  let arReadyFired = false;
+  let banterTurns = 0;
+  let lastBanterErr = '—';
   const spirits = []; // {image, vessel, name, personality, voice, color}
 
   let mediaStream = null;
@@ -801,7 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
       await new Promise((resolve) => {
         let done = false;
         const finish = () => { if (!done) { done = true; resolve(); } };
-        sceneEl.addEventListener('arReady', finish, { once: true });
+        sceneEl.addEventListener('arReady', () => { arReadyFired = true; finish(); }, { once: true });
         setTimeout(finish, 8000);
       });
 
@@ -1046,6 +1049,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function runBanterTurn(session) {
     if (!isBanterRunning || session !== banterSession) return;
+    try {
 
     // 画面に2体以上映っていなければ会話しない（映るまで待機）
     const visible = visibleSpiritIndices();
@@ -1061,10 +1065,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isBanterRunning || session !== banterSession) return;
 
     if (!turn || !turn.data || turn.data.error || !turn.data.reply) {
+      lastBanterErr = turn?.data?.error || 'no reply';
       console.error('Banter turn error:', turn && turn.data);
       banterTimeout = setTimeout(() => runBanterTurn(session), 3000);
       return;
     }
+    lastBanterErr = '—';
+    banterTurns++;
 
     const idx = turn.globalIdx;
 
@@ -1106,6 +1113,12 @@ document.addEventListener('DOMContentLoaded', () => {
         banterTimeout = setTimeout(() => runBanterTurn(session), delay);
       }
     });
+
+    } catch (e) {
+      lastBanterErr = String(e);
+      console.error('runBanterTurn exception:', e);
+      banterTimeout = setTimeout(() => runBanterTurn(session), 3000);
+    }
   }
 
   // ===== 3D吹き出し (CanvasTexture直接適用) =====
@@ -1273,11 +1286,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!debugEl) return;
     const lines = [
       `mode:    ${mode} / ui: ${uiMode}`,
-      `spirits: ${spirits.length}  visible: ${visibleTargets.size}`,
+      `spirits: ${spirits.length}  visible: ${visibleTargets.size}  arRdy: ${arReadyFired ? '✓' : '—'}`,
       `scan:    ${isScanning ? '▶' : '—'}  compile: ${isCompiling ? '⏳' : '—'}  req: ${isRequestPending ? '⏳' : '—'}`,
-      `banter:  ${isBanterRunning ? '▶' : '—'}  audio: ${audioUnlocked ? '✓' : '✗'}`,
+      `banter:  ${isBanterRunning ? '▶' : '—'}  turns: ${banterTurns}  audio: ${audioUnlocked ? '✓' : '✗'}`,
       `detect:  ${detectedTarget ? detectedTarget.name : '—'}`,
       `gaze:    ${gazeStartTime ? Math.round((Date.now() - gazeStartTime) / 100) / 10 + 's' : '—'}`,
+      `err:     ${lastBanterErr}`,
     ];
     debugEl.textContent = lines.join('\n');
   }, 200);
