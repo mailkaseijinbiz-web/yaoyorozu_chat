@@ -1,9 +1,13 @@
 // フキダシ用ビルボード: 親(トラッキング対象)がどんな角度でも、常にカメラ正面を向かせて歪みを防ぐ
 AFRAME.registerComponent('billboard', {
   init() {
+    // tickは毎フレーム走るため、ベクトル/クォータニオンは使い回してGC負荷を避ける
     this.camPos = new THREE.Vector3();
     this.targetPos = new THREE.Vector3();
     this.qParentInv = new THREE.Quaternion();
+    this.dir = new THREE.Vector3();
+    this.qWorld = new THREE.Quaternion();
+    this.zAxis = new THREE.Vector3(0, 0, 1);
   },
   tick() {
     const cam = this.el.sceneEl.camera;
@@ -15,14 +19,14 @@ AFRAME.registerComponent('billboard', {
     obj.getWorldPosition(this.targetPos);
 
     // ターゲットからカメラへの方向ベクトル (プレーンの表面Z+が向くべき方向)
-    const dir = new THREE.Vector3().subVectors(this.camPos, this.targetPos).normalize();
+    this.dir.subVectors(this.camPos, this.targetPos).normalize();
 
     // Z+方向からdirへのワールド回転を計算
-    const qWorld = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    this.qWorld.setFromUnitVectors(this.zAxis, this.dir);
 
     // 親のワールド回転の逆を求めて、ローカル回転に変換
     obj.parent.getWorldQuaternion(this.qParentInv).invert();
-    obj.quaternion.copy(this.qParentInv.multiply(qWorld));
+    obj.quaternion.copy(this.qParentInv.multiply(this.qWorld));
   }
 });
 
@@ -78,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let gazeStartTime = null;
   let gazeInterval = null;
+  let gazeSig = null; // すり替え判定の基準シグネチャ。凝視中は毎周期その時点のフレームへ更新する(runScanCycle参照)
 
   let motionInterval = null;
   let prevMotionFrame = null;
@@ -191,6 +196,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // 登録済みのモノがトラッキングを外れた瞬間に別名で再認識され、
   // 二重召喚されてマーカーが重なるのを防ぐ
   const DUP_SIMILARITY = 0.85; // 正規化相関がこれ以上なら同一物とみなす
+  // 凝視のすり替え検知用。これ"未満"なら別物とみなしゲージをリセットする。
+  // 重複判定(0.85)を流用すると同一物体のbboxジッタで誤リセットし召喚不能になるため、
+  // 「明らかに別物」だけを捉える十分緩い値にする。
+  const GAZE_SWAP_THRESHOLD = 0.45;
 
   function regionSignature(source, box) {
     try {
@@ -228,12 +237,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function matchesRegisteredImage(sig) {
     if (!sig) return false;
-    return spirits.some(s => {
-      if (!s.sig) return false;
-      let dot = 0;
-      for (let i = 0; i < 256; i++) dot += s.sig[i] * sig[i];
-      return dot >= DUP_SIMILARITY;
-    });
+    return spirits.some(s => sigCorrelation(s.sig, sig) >= DUP_SIMILARITY);
+  }
+
+  // 2つの正規化シグネチャの相関(内積)。どちらか欠けていれば0(=非類似)。
+  function sigCorrelation(a, b) {
+    if (!a || !b) return 0;
+    let dot = 0;
+    for (let i = 0; i < 256; i++) dot += a[i] * b[i];
+    return dot;
   }
 
   // 検出矩形が、トラッキング中の精霊のスクリーン位置と重なっているか
@@ -270,20 +282,41 @@ document.addEventListener('DOMContentLoaded', () => {
     return spirits.some(s => String(s.vessel).replace(/\s/g, '') === n);
   }
 
+  // 精霊名の重複を避ける。同名(例:コップ2個→両方「器の精霊」)だと
+  // banter履歴の名前ベースのフィルタでセリフが混ざるため、②③…を付けて一意にする。
+  function uniqueSpiritName(base) {
+    const name = base || `精霊${spirits.length}`;
+    if (!spirits.some(s => s.name === name)) return name;
+    const SUP = ['②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+    for (let n = 2; n <= 20; n++) {
+      const cand = name + (SUP[n - 2] || n);
+      if (!spirits.some(s => s.name === cand)) return cand;
+    }
+    return `${name} ${spirits.length + 1}`;
+  }
+
   function updateScanGuideVisibility() {
     if (mode === 'ar') {
       if (visibleTargets.size > 0) {
+        // 精霊が映っている間: 文言を隠し、capture枠は完全透明(opacity:0)で残す。
+        // display:noneにするとgetBoundingClientRectが0になりAIスキャンが壊れ、isOverTrackedSpirit
+        // も効かなくなるため、レイアウトを保つopacity:0で「見えないが計測可能」にする
+        // (0.35の半透明だとコーナー枠がAR映像に被って見えてしまう)。
         guideText.classList.add('hidden');
-        captureGuide.classList.add('hidden');
+        captureGuide.classList.remove('hidden');
+        captureGuide.classList.remove('subtle');
+        captureGuide.classList.add('transparent');
       } else {
         guideText.classList.remove('hidden');
         captureGuide.classList.remove('hidden');
+        captureGuide.classList.remove('transparent');
         captureGuide.classList.add('subtle');
       }
     } else {
       guideText.classList.remove('hidden');
       captureGuide.classList.remove('hidden');
       captureGuide.classList.remove('subtle');
+      captureGuide.classList.remove('transparent');
     }
   }
 
@@ -354,6 +387,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const guideRect = captureGuide.getBoundingClientRect();
     const videoRect = video.getBoundingClientRect();
 
+    // ガイドが非表示(display:none)や映像未準備のときは空画像を作らずに諦める
+    if (guideRect.width < 1 || guideRect.height < 1 || !video.videoWidth) return null;
+
     let originX, originY, scale;
     if (video === videoElement) {
       scale = Math.max(videoRect.width / video.videoWidth, videoRect.height / video.videoHeight);
@@ -396,6 +432,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const dataUrl = captureGuideRegion();
+    if (!dataUrl) {
+      scanTimeout = setTimeout(runScanCycle, 300);
+      return;
+    }
     isRequestPending = true;
 
     try {
@@ -422,6 +462,17 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           resetGaze();
         } else {
+          // 凝視中に枠内が「別物」へすり替わった瞬間だけゲージをリセットし、溜めた時間の乗っ取りを防ぐ。
+          // 【意図的なトレードオフ】基準gazeSigは凝視開始時に固定せず、毎周期“直前フレーム”へ更新する(下記)。
+          //  - 開始フレームに固定すると、同一物体のbboxジッタ/露出ドリフトで相関が落ち、静止した正規の
+          //    対象でもゲージが誤リセットされ「召喚できない」P1不具合になる（しきい値を下げても低テクスチャ
+          //    物体では起こりうる）。隣接フレーム比較なら静止物は決して誤リセットしない。
+          //  - 代償として、隣接フレーム間で相関が急落しない“緩慢なパン”でのすり替えは捕捉できない。
+          //    これは別系統のmotion-watch（カメラ移動で即リセット）が補完する。
+          //  しきい値は重複判定(0.85)ではなく、明らかな別物だけを捉える緩いGAZE_SWAP_THRESHOLDを使う。
+          if (gazeStartTime !== null && sig && gazeSig && sigCorrelation(sig, gazeSig) < GAZE_SWAP_THRESHOLD) {
+            resetGaze();
+          }
           detectedTarget = target;
           detectedSig = sig;
           detectedColor = extractThemeColor(snapshotCanvas, target.box);
@@ -430,6 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
           scanStatus.textContent = `${target.name} — ${target.spiritName}`;
           if (mode === 'ar') guideText.textContent = `「${target.spiritName}」を凝視で召喚`;
           startGaze();
+          // 基準を最新フレームへ更新（隣接フレーム比較にして静止物の誤リセットを防ぐ。上のコメント参照）
+          if (gazeStartTime !== null && sig) gazeSig = sig;
         }
       } else {
         detectedTarget = null;
@@ -566,6 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function startGaze() {
     if (gazeStartTime !== null) return;
     gazeStartTime = Date.now();
+    gazeSig = detectedSig; // この対象で凝視を開始したことを記録
     updateScanLine();
 
     gazeInterval = setInterval(() => {
@@ -585,6 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resetGaze() {
     gazeStartTime = null;
+    gazeSig = null;
     if (gazeInterval) {
       clearInterval(gazeInterval);
       gazeInterval = null;
@@ -666,7 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
       spirits.push({
         image: cropImageWithBox(fullImg, target.box),
         vessel: target.name || '不思議な器',
-        name: target.spiritName || `精霊${spirits.length}`,
+        name: uniqueSpiritName(target.spiritName),
         personality: target.personality || '陽気でおしゃべり好き',
         voice: target.voice || 'cool_male',
         color: detectedColor || nextColor(), // 撮影したモノのドミナントカラー
@@ -735,12 +790,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // a-sceneやMindARが作成した追加のvideo/canvas要素を全削除
     const vids = document.querySelectorAll('body > video, body > canvas');
     vids.forEach(v => {
-      if (v !== videoElement) {
-        if (v.srcObject) {
-          v.srcObject.getTracks().forEach(t => t.stop());
-        }
-        v.remove();
+      // 自前の要素(スキャンvideo・スナップショット/オーバーレイcanvas)は消さない
+      if (v === videoElement || v === snapshotCanvas || v === overlayCanvas) return;
+      if (v.srcObject) {
+        v.srcObject.getTracks().forEach(t => t.stop());
       }
+      v.remove();
     });
 
     const vid = arSceneContainer.querySelector('video');
@@ -752,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
     arVideo = null;
   }
 
-  async function enterAR(newcomerName) {
+  async function enterAR(newcomerName, isRetry = false) {
     isCompiling = true;
     stopScanning();
     stopBanterLoop();
@@ -801,13 +856,32 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Compilation error:', err);
       isCompiling = false;
       loadingOverlay.classList.add('hidden');
-      showToast('ARコンパイルに失敗しました。再スキャンします…');
-      // デッドロック防止: カメラとスキャンを再開して復旧
-      if (mode === 'scan') {
-        await startCamera();
-        videoElement.classList.remove('hidden-feed');
+
+      // コンパイルを失敗させた新規精霊(直前にpushされたもの)を取り除く。
+      // 残すと以降の再コンパイルに毎回混ざって同じ失敗を繰り返し、AR再入が永久に不能になる。
+      const poppedNewcomer = !!newcomerName && spirits.length > 0;
+      if (poppedNewcomer) spirits.pop();
+
+      // 直前まで動いていた構成(>=2体)が残っていれば、その構成でARを一度だけ作り直して会話を復帰。
+      if (poppedNewcomer && !isRetry && spirits.length >= 2) {
+        showToast('追加召喚に失敗。前の会話に戻します…');
+        return enterAR(null, true);
       }
-      startScanning();
+
+      // 復旧できない場合はスキャンモードへ安全に戻す。失敗時はモードに関わらずカメラを必ず生かす。
+      // AR中(mode==='ar')の失敗ではteardownSceneでARカメラを停止済みのため、
+      // ここでカメラを再開しないと画面が固まる(文鎮化)。
+      showToast('ARコンパイルに失敗しました。再スキャンします…');
+      teardownScene();
+      mode = 'scan';
+      activeVideo = videoElement;
+      videoElement.classList.remove('hidden-feed');
+      const recovered = await startCamera();
+      if (recovered) {
+        startScanning();
+      } else {
+        showToast('カメラの再起動に失敗しました。ページを再読み込みしてください', true);
+      }
     }
   }
 
@@ -921,7 +995,13 @@ document.addEventListener('DOMContentLoaded', () => {
     audio.onerror = () => finish(false);
     watchdog = setTimeout(() => finish(true), 20000);
     audio.src = objUrl;
-    audio.play().catch(() => {
+    audio.play().catch((err) => {
+      // pause()による意図的な中断(AbortError)は自動再生ブロックではないので、
+      // 偽の「タップしてください」トーストを出さない。
+      if (err && err.name === 'AbortError') {
+        finish(false);
+        return;
+      }
       audioUnlocked = false;
       showToast('🔊 画面をタップすると精霊の声が出ます', true);
       finish(false);
@@ -991,9 +1071,16 @@ document.addEventListener('DOMContentLoaded', () => {
     isBanterRunning = true;
     pendingTurn = null;
     newcomerToAnnounce = newcomerName || null;
-    
-    // シチュエーションをランダムに決定
-    currentSituation = SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
+
+    // 新メンバー参加時は会話履歴をリセットし、起承転結を最初(起)からやり直す。
+    // (古い履歴が残っていると server 側の turnCount が大きいまま「結」になり、
+    //  歓迎する間もなく1ターンでオチがついて即終了してしまう)
+    if (newcomerName) banterHistory = [];
+
+    // シチュエーションは初回/再開時のみ更新。新メンバー参加時は場面を維持する。
+    if (!currentSituation || !newcomerName) {
+      currentSituation = SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
+    }
     console.log('Current Situation:', currentSituation);
 
     arControls.classList.add('hidden'); // 会話開始時に再開ボタンを隠す
@@ -1074,6 +1161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== 3D吹き出し (CanvasTexture直接適用) =====
   const bubbleCanvases = [];
   const bubbleTextures = [];
+  const bubbleHideTimers = []; // hide→show競合で吹き出しが表示直後に消えるのを防ぐ
 
   function getBubbleCanvas(i) {
     if (!bubbleCanvases[i]) {
@@ -1088,6 +1176,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function showSpeechBubble(id, text) {
     const plane = document.getElementById(`bubble-plane-${id}`);
     if (!plane) return;
+
+    // 直前のhideが予約した「消す」タイマーを取り消す(表示直後に消されるのを防ぐ)
+    if (bubbleHideTimers[id]) {
+      clearTimeout(bubbleHideTimers[id]);
+      bubbleHideTimers[id] = null;
+    }
 
     const canvas = getBubbleCanvas(id);
     const ctx = canvas.getContext('2d');
@@ -1169,7 +1263,9 @@ document.addEventListener('DOMContentLoaded', () => {
       dur: 200,
       easing: 'easeInQuad'
     });
-    setTimeout(() => {
+    if (bubbleHideTimers[id]) clearTimeout(bubbleHideTimers[id]);
+    bubbleHideTimers[id] = setTimeout(() => {
+      bubbleHideTimers[id] = null;
       if (plane.parentNode) plane.setAttribute('visible', 'false');
     }, 220);
   }
