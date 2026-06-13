@@ -32,8 +32,8 @@ AFRAME.registerComponent('billboard', {
 
 document.addEventListener('DOMContentLoaded', () => {
   // ===== チューニング用定数 =====
-  const GAZE_DURATION = 3000;        // 凝視で注入完了までの時間(ms)
-  const SCAN_INTERVAL = 900;         // AIスキャン(物体検出)の間隔(ms)
+  const GAZE_DURATION = 2000;        // 凝視で注入完了までの時間(ms)
+  const SCAN_INTERVAL = 700;         // AIスキャン(物体検出)の間隔(ms)
   const MOTION_CHECK_INTERVAL = 150; // カメラぶれ検知の間隔(ms)
   const MOTION_THRESHOLD = 25;       // 平均輝度差がこれを超えたら「視線逸らし」とみなす(0-255)
   const TURN_GAP_MS = 250;           // セリフ読み上げ後、次のターンまでの間(ms)
@@ -80,9 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let isScanning = false;
   let isRequestPending = false;
   let scanTimeout = null;
-  let detectedTarget = null;
-  let detectedColor = null;
-  let detectedSig = null;
+  let detectedTargets = []; // [{target, sig, color}, ...]
   let isCompiling = false;
 
   let gazeStartTime = null;
@@ -356,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scanSessionId++;
     isScanning = true;
     isRequestPending = false;
-    detectedTarget = null;
+    detectedTargets = [];
     resetGaze();
     updateGuideUI();
     syncOverlayCanvas();
@@ -459,45 +457,68 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isScanning || scanSessionId !== session) return;
 
       if (data.targets && data.targets.length > 0) {
-        const target = data.targets[0];
-        const sig = regionSignature(snapshotCanvas, target.box);
-        if (isRegistered(target.name) || isOverTrackedSpirit(target.box) || matchesRegisteredImage(sig)) {
-          // 登録済み・会話参加中・見た目が登録済みと同一のモノはスルー (二重登録とマーカーの重なりを防ぐ)
-          detectedTarget = null;
+        // 全ターゲットを評価し、未登録・未重複のものだけ収集する
+        const newTargets = [];
+        const registeredNames = [];
+        for (const target of data.targets) {
+          const sig = regionSignature(snapshotCanvas, target.box);
+          if (isRegistered(target.name) || isOverTrackedSpirit(target.box) || matchesRegisteredImage(sig)) {
+            registeredNames.push(target.name);
+          } else {
+            const color = extractThemeColor(snapshotCanvas, target.box);
+            newTargets.push({ target, sig, color });
+          }
+        }
+
+        if (newTargets.length === 0) {
+          // 検出されたモノはすべて登録済み
+          detectedTargets = [];
           clearOverlay();
           if (mode === 'scan') {
-            scanStatus.textContent = `「${target.name}」は登録済み — 別のモノを写してください`;
+            scanStatus.textContent = `「${registeredNames[0]}」は登録済み — 別のモノを写してください`;
           } else {
             updateGuideUI();
           }
           resetGaze();
         } else {
+          // ターゲット集合が変わった(別のモノに切り替わった)場合はゲージをリセット
+          const newNames = newTargets.map(t => t.target.name).sort().join(',');
+          const oldNames = detectedTargets.map(t => t.target.name).sort().join(',');
+          if (newNames !== oldNames && gazeStartTime !== null) {
+            resetGaze();
+          }
+
           // 凝視中に枠内が「別物」へすり替わった瞬間だけゲージをリセットし、溜めた時間の乗っ取りを防ぐ。
-          // 【意図的なトレードオフ】基準gazeSigは凝視開始時に固定せず、毎周期“直前フレーム”へ更新する(下記)。
+          // 【意図的なトレードオフ】基準gazeSigは凝視開始時に固定せず、毎周期”直前フレーム”へ更新する(下記)。
           //  - 開始フレームに固定すると、同一物体のbboxジッタ/露出ドリフトで相関が落ち、静止した正規の
           //    対象でもゲージが誤リセットされ「召喚できない」P1不具合になる（しきい値を下げても低テクスチャ
           //    物体では起こりうる）。隣接フレーム比較なら静止物は決して誤リセットしない。
-          //  - 代償として、隣接フレーム間で相関が急落しない“緩慢なパン”でのすり替えは捕捉できない。
+          //  - 代償として、隣接フレーム間で相関が急落しない”緩慢なパン”でのすり替えは捕捉できない。
           //    これは別系統のmotion-watch（カメラ移動で即リセット）が補完する。
           //  しきい値は重複判定(0.85)ではなく、明らかな別物だけを捉える緩いGAZE_SWAP_THRESHOLDを使う。
-          if (gazeStartTime !== null && sig && gazeSig && sigCorrelation(sig, gazeSig) < GAZE_SWAP_THRESHOLD) {
+          const primarySig = newTargets[0].sig;
+          if (gazeStartTime !== null && primarySig && gazeSig && sigCorrelation(primarySig, gazeSig) < GAZE_SWAP_THRESHOLD) {
             resetGaze();
           }
-          detectedTarget = target;
-          detectedSig = sig;
-          detectedColor = extractThemeColor(snapshotCanvas, target.box);
+
+          detectedTargets = newTargets;
           startOverlayLoop();
-          // 認識できたモノを画面下に白で表示
-          scanStatus.textContent = `${target.name} — ${target.spiritName}`;
-          if (mode === 'ar') guideText.textContent = `「${target.spiritName}」を凝視で召喚`;
+
+          // ステータステキスト
+          if (newTargets.length === 1) {
+            scanStatus.textContent = `${newTargets[0].target.name} — ${newTargets[0].target.spiritName}`;
+            if (mode === 'ar') guideText.textContent = `「${newTargets[0].target.spiritName}」を凝視で召喚`;
+          } else {
+            const names = newTargets.map(t => t.target.spiritName).join('・');
+            scanStatus.textContent = `${names} — ${newTargets.length}体同時召喚！`;
+          }
+
           startGaze();
           // 基準を最新フレームへ更新（隣接フレーム比較にして静止物の誤リセットを防ぐ。上のコメント参照）
-          if (gazeStartTime !== null && sig) gazeSig = sig;
+          if (gazeStartTime !== null && primarySig) gazeSig = primarySig;
         }
       } else {
-        detectedTarget = null;
-        detectedColor = null;
-        detectedSig = null;
+        detectedTargets = [];
         clearOverlay();
         if (mode === 'scan') scanStatus.textContent = '';
         else updateGuideUI();
@@ -524,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function overlayTick(time) {
     overlayRAF = null;
-    if (!isScanning || !detectedTarget) {
+    if (!isScanning || detectedTargets.length === 0) {
       clearOverlay();
       return;
     }
@@ -538,46 +559,48 @@ document.addEventListener('DOMContentLoaded', () => {
     const h = overlayCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const color = detectedColor || nextColor();
-    const [ymin, xmin, ymax, xmax] = detectedTarget.box.map(v => v / 1000);
-    const cx = (xmin + xmax) / 2 * w;
-    const cy = (ymin + ymax) / 2 * h;
-
     const progress = gazeStartTime !== null
       ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
     const pulse = 0.5 + 0.5 * Math.sin(time / 300);
 
-    // 中心クロスヘア
-    const crossLen = 10 + pulse * 3;
-    const gapR = 6;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.moveTo(cx - crossLen - gapR, cy); ctx.lineTo(cx - gapR, cy);
-    ctx.moveTo(cx + gapR, cy);           ctx.lineTo(cx + crossLen + gapR, cy);
-    ctx.moveTo(cx, cy - crossLen - gapR); ctx.lineTo(cx, cy - gapR);
-    ctx.moveTo(cx, cy + gapR);           ctx.lineTo(cx, cy + crossLen + gapR);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    for (const { target, color } of detectedTargets) {
+      const col = color || nextColor();
+      const [ymin, xmin, ymax, xmax] = target.box.map(v => v / 1000);
+      const cx = (xmin + xmax) / 2 * w;
+      const cy = (ymin + ymax) / 2 * h;
 
-    // 凝視進行アーク (0→360°)
-    const arcR = 22 + progress * 6;
-    ctx.lineWidth = 3;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10 + progress * 10;
-    ctx.globalAlpha = 0.35 + progress * 0.65;
-    ctx.strokeStyle = color;
-    ctx.beginPath();
-    if (progress > 0) {
-      ctx.arc(cx, cy, arcR, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-    } else {
-      ctx.arc(cx, cy, arcR * (0.9 + pulse * 0.1), 0, Math.PI * 2);
+      // 中心クロスヘア
+      const crossLen = 10 + pulse * 3;
+      const gapR = 6;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(cx - crossLen - gapR, cy); ctx.lineTo(cx - gapR, cy);
+      ctx.moveTo(cx + gapR, cy);           ctx.lineTo(cx + crossLen + gapR, cy);
+      ctx.moveTo(cx, cy - crossLen - gapR); ctx.lineTo(cx, cy - gapR);
+      ctx.moveTo(cx, cy + gapR);           ctx.lineTo(cx, cy + crossLen + gapR);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 凝視進行アーク (0→360°)
+      const arcR = 22 + progress * 6;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 10 + progress * 10;
+      ctx.globalAlpha = 0.35 + progress * 0.65;
+      ctx.strokeStyle = col;
+      ctx.beginPath();
+      if (progress > 0) {
+        ctx.arc(cx, cy, arcR, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+      } else {
+        ctx.arc(cx, cy, arcR * (0.9 + pulse * 0.1), 0, Math.PI * 2);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
     }
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
   }
 
   // ==========================================
@@ -587,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function startGaze() {
     if (gazeStartTime !== null) return;
     gazeStartTime = Date.now();
-    gazeSig = detectedSig; // この対象で凝視を開始したことを記録
+    gazeSig = detectedTargets[0]?.sig || null; // この対象で凝視を開始したことを記録
     updateScanLine();
 
     gazeInterval = setInterval(() => {
@@ -651,9 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (let i = 0; i < gray.length; i++) sum += Math.abs(gray[i] - prevMotionFrame[i]);
       if (sum / gray.length > MOTION_THRESHOLD && gazeStartTime !== null) {
         resetGaze();
-        detectedTarget = null;
-        detectedColor = null;
-        detectedSig = null;
+        detectedTargets = [];
         clearOverlay();
         scanStatus.textContent = '視線が逸れました — ゲージをリセット';
         if (mode === 'ar') updateGuideUI();
@@ -667,15 +688,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
 
   async function triggerSoulInfusion() {
-    if (!detectedTarget) {
+    if (detectedTargets.length === 0) {
       resetGaze();
       return;
     }
-    const target = detectedTarget;
+    const snapshot = detectedTargets.slice(); // 最終チェック用にコピー
 
-    // 注入直前の最終チェック: 凝視中にトラッキングが復帰した/同一物だと判明した場合は中止
-    if (isRegistered(target.name) || isOverTrackedSpirit(target.box) || matchesRegisteredImage(detectedSig)) {
-      detectedTarget = null;
+    // 注入直前の最終チェック: 凝視中にトラッキングが復帰/同一物だと判明した場合は除外
+    const validTargets = snapshot.filter(({ target, sig }) =>
+      !isRegistered(target.name) && !isOverTrackedSpirit(target.box) && !matchesRegisteredImage(sig)
+    );
+
+    if (validTargets.length === 0) {
+      detectedTargets = [];
       resetGaze();
       return;
     }
@@ -686,21 +711,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const fullImg = await loadImage(snapshotCanvas.toDataURL('image/jpeg'));
-      spirits.push({
-        image: cropImageWithBox(fullImg, target.box),
-        vessel: target.name || '不思議な器',
-        name: uniqueSpiritName(target.spiritName),
-        personality: target.personality || '陽気でおしゃべり好き',
-        voice: target.voice || 'cool_male',
-        color: detectedColor || nextColor(), // 撮影したモノのドミナントカラー
-        sig: detectedSig                     // 重複召喚防止用の画像シグネチャ
-      });
-      const newSpirit = spirits[spirits.length - 1];
-      showToast(`✨ ${newSpirit.name}が宿った！`);
+      const prevCount = spirits.length;
+      const newNames = [];
+
+      for (const { target, sig, color } of validTargets) {
+        spirits.push({
+          image: cropImageWithBox(fullImg, target.box),
+          vessel: target.name || '不思議な器',
+          name: uniqueSpiritName(target.spiritName),
+          personality: target.personality || '陽気でおしゃべり好き',
+          voice: target.voice || 'cool_male',
+          color: color || nextColor(),
+          sig
+        });
+        newNames.push(spirits[spirits.length - 1].name);
+      }
+
+      showToast(newNames.length === 1
+        ? `✨ ${newNames[0]}が宿った！`
+        : `✨ ${newNames.join('・')}が宿った！`);
 
       if (spirits.length >= 2) {
-        // 2体以上で(再)コンパイル → ARへ。3体目以降は会話に途中参加
-        await enterAR(spirits.length > 2 ? newSpirit.name : null);
+        // ARが既に動いていた(prevCount >= 2)なら最後の新参精霊を途中参加として通知
+        const newcomerName = prevCount >= 2 ? newNames[newNames.length - 1] : null;
+        await enterAR(newcomerName);
       } else {
         startScanning();
       }
@@ -1289,7 +1323,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `spirits: ${spirits.length}  visible: ${visibleTargets.size}  arRdy: ${arReadyFired ? '✓' : '—'}`,
       `scan:    ${isScanning ? '▶' : '—'}  compile: ${isCompiling ? '⏳' : '—'}  req: ${isRequestPending ? '⏳' : '—'}`,
       `banter:  ${isBanterRunning ? '▶' : '—'}  turns: ${banterTurns}  audio: ${audioUnlocked ? '✓' : '✗'}`,
-      `detect:  ${detectedTarget ? detectedTarget.name : '—'}`,
+      `detect:  ${detectedTargets.length ? detectedTargets.map(t => t.target.name).join(', ') : '—'}`,
       `gaze:    ${gazeStartTime ? Math.round((Date.now() - gazeStartTime) / 100) / 10 + 's' : '—'}`,
       `err:     ${lastBanterErr}`,
     ];
