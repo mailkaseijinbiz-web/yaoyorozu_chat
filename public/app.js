@@ -52,8 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const snapshotCanvas = document.getElementById('snapshot-canvas');
   const arSceneContainer = document.getElementById('ar-scene-container');
   const toastDiv = document.getElementById('toast');
-  const arControls = document.getElementById('ar-controls');
-  const restartBanterBtn = document.getElementById('restart-banter-btn');
+  const modeToggle = document.getElementById('mode-toggle');
+  const modeScanBtn = document.getElementById('mode-scan-btn');
+  const modeBanterBtn = document.getElementById('mode-banter-btn');
 
   // ===== 状態 =====
   let currentSituation = null;
@@ -64,7 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
     { location: 'ごちゃごちゃした作業机の上', weather: '夕暮れ時の淡い西日' },
     { location: '真夜中の書斎', weather: '冷たい風が吹く星空' }
   ];
-  let mode = 'scan'; // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
+  let mode = 'scan';    // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
+  let uiMode = 'scan'; // 'scan' (スキャンUI表示) | 'banter' (会話鑑賞)
   const spirits = []; // {image, vessel, name, personality, voice, color}
 
   let mediaStream = null;
@@ -296,6 +298,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateScanGuideVisibility() {
+    if (uiMode === 'banter') {
+      captureGuide.classList.add('hidden');
+      guideText.classList.add('hidden');
+      return;
+    }
     if (mode === 'ar') {
       if (visibleTargets.size > 0) {
         // 精霊が映っている間: 文言を隠し、capture枠は完全透明(opacity:0)で残す。
@@ -530,86 +537,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const color = detectedColor || nextColor();
     const [ymin, xmin, ymax, xmax] = detectedTarget.box.map(v => v / 1000);
-    const rx = xmin * w;
-    const ry = ymin * h;
-    const rw = (xmax - xmin) * w;
-    const rh = (ymax - ymin) * h;
+    const cx = (xmin + xmax) / 2 * w;
+    const cy = (ymin + ymax) / 2 * h;
+
     const progress = gazeStartTime !== null
       ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
     const pulse = 0.5 + 0.5 * Math.sin(time / 300);
 
-    // 1. エネルギー充填 (凝視の進行に合わせて下から満ちる)
-    if (progress > 0) {
-      const fillH = rh * progress;
-      const gy = ry + rh - fillH;
-      const grad = ctx.createLinearGradient(0, ry + rh, 0, gy);
-      grad.addColorStop(0, color + 'a6');
-      grad.addColorStop(1, color + '24');
-      ctx.fillStyle = grad;
-      ctx.fillRect(rx, gy, rw, fillH);
-
-      // 充填面の光るライン
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 14;
-      ctx.beginPath();
-      ctx.moveTo(rx, gy);
-      ctx.lineTo(rx + rw, gy);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // 上昇するパーティクル
-      ctx.fillStyle = '#ffffff';
-      for (let i = 0; i < 16; i++) {
-        const px = rx + ((i * 0.618) % 1) * rw;
-        const speed = 900 + (i % 5) * 350;
-        const frac = ((time + i * 530) % speed) / speed;
-        const py = ry + rh - frac * fillH;
-        const size = 1.5 + (i % 3);
-        ctx.globalAlpha = (1 - frac) * 0.9;
-        ctx.fillRect(px, py, size, size);
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // 2. 流れる破線の枠 (解析中の演出)
+    // 中心クロスヘア
+    const crossLen = 10 + pulse * 3;
+    const gapR = 6;
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([12, 8]);
-    ctx.lineDashOffset = -time / 25;
-    ctx.strokeRect(rx, ry, rw, rh);
-    ctx.setLineDash([]);
-
-    // 3. パルスするコーナーブラケット
-    const len = Math.min(26, rw * 0.2, rh * 0.2);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 6 + pulse * 10 + progress * 12;
-    const corners = [
-      [rx, ry, 1, 1], [rx + rw, ry, -1, 1],
-      [rx, ry + rh, 1, -1], [rx + rw, ry + rh, -1, -1]
-    ];
-    corners.forEach(([cx, cy, dx, dy]) => {
-      ctx.beginPath();
-      ctx.moveTo(cx + dx * len, cy);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx, cy + dy * len);
-      ctx.stroke();
-    });
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(cx - crossLen - gapR, cy); ctx.lineTo(cx - gapR, cy);
+    ctx.moveTo(cx + gapR, cy);           ctx.lineTo(cx + crossLen + gapR, cy);
+    ctx.moveTo(cx, cy - crossLen - gapR); ctx.lineTo(cx, cy - gapR);
+    ctx.moveTo(cx, cy + gapR);           ctx.lineTo(cx, cy + crossLen + gapR);
+    ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // 4. 解析スイープライン (凝視前のみ)
-    if (progress === 0) {
-      const sy = ry + (0.5 + 0.5 * Math.sin(time / 450)) * rh;
-      const grad2 = ctx.createLinearGradient(rx, 0, rx + rw, 0);
-      grad2.addColorStop(0, color + '00');
-      grad2.addColorStop(0.5, color + 'e6');
-      grad2.addColorStop(1, color + '00');
-      ctx.fillStyle = grad2;
-      ctx.fillRect(rx, sy - 1.5, rw, 3);
+    // 凝視進行アーク (0→360°)
+    const arcR = 22 + progress * 6;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10 + progress * 10;
+    ctx.globalAlpha = 0.35 + progress * 0.65;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    if (progress > 0) {
+      ctx.arc(cx, cy, arcR, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+    } else {
+      ctx.arc(cx, cy, arcR * (0.9 + pulse * 0.1), 0, Math.PI * 2);
     }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
   }
 
   // ==========================================
@@ -845,13 +810,11 @@ document.addEventListener('DOMContentLoaded', () => {
       mode = 'ar';
       isCompiling = false;
 
-      captureGuide.classList.add('subtle');
       loadingOverlay.classList.add('hidden');
-      updateGuideUI();
       setupTargetListeners();
-
+      modeToggle.classList.remove('hidden');
+      setUIMode('banter');       // 会話モードへ切替 (スキャンUIを隠す)
       startBanter(newcomerName); // 会話は自動で開始
-      startScanning();           // 追加召喚用のスキャンも継続
     } catch (err) {
       console.error('Compilation error:', err);
       isCompiling = false;
@@ -933,21 +896,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let audioUnlocked = false;
   // 無音wav: ユーザー操作起点でAudioをアンロックする (iOS Safari対策)
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-
-  // マイクをキャプチャ状態にしておくと、iOS/Androidはページの音声自動再生を許可する。
-  // これでタップなしでも精霊の声が出る (録音・送信は一切しない)。
-  // 権限を拒否された場合は従来のタップアンロックにフォールバック。
-  let micStream = null;
-  async function enableTapFreeAudio() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioUnlocked = true;
-      hideToast();
-    } catch (e) {
-      console.warn('Mic capture unavailable, falling back to tap unlock:', e.message);
-    }
-  }
 
   document.addEventListener('pointerdown', () => {
     if (audioUnlocked) return;
@@ -1083,7 +1031,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     console.log('Current Situation:', currentSituation);
 
-    arControls.classList.add('hidden'); // 会話開始時に再開ボタンを隠す
     runBanterTurn(banterSession);
   }
 
@@ -1146,11 +1093,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isBanterRunning || session !== banterSession) return;
       if (isEnding) {
         isBanterRunning = false;
-        // 3.5秒後に吹き出しを消し、再開ボタンを表示
+        // 会話終了後、少し間を置いて自動再開（会話モードの場合）
         setTimeout(() => {
           spirits.forEach((_, i) => hideSpeechBubble(i));
-          arControls.classList.remove('hidden');
-        }, 3500);
+          if (uiMode === 'banter' && spirits.length >= 2) {
+            banterHistory = [];
+            startBanter();
+          }
+        }, 5000);
       } else {
         const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + turn.data.reply.length * 90);
         banterTimeout = setTimeout(() => runBanterTurn(session), delay);
@@ -1271,39 +1221,97 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==========================================
-  // 起動: スタート画面経由でカメラ起動・音声アンロック
+  // モード切替
+  // ==========================================
+
+  function setUIMode(newMode) {
+    uiMode = newMode;
+    modeScanBtn.classList.toggle('active', newMode === 'scan');
+    modeBanterBtn.classList.toggle('active', newMode === 'banter');
+    if (newMode === 'scan') {
+      captureGuide.classList.remove('hidden');
+      guideText.classList.remove('hidden');
+      updateGuideUI();
+      if (!isScanning && mode === 'ar') startScanning();
+    } else {
+      captureGuide.classList.add('hidden');
+      guideText.classList.add('hidden');
+      scanStatus.textContent = '';
+      if (isScanning) stopScanning();
+      clearOverlay();
+    }
+  }
+
+  modeScanBtn.addEventListener('click', () => {
+    if (uiMode === 'scan') return;
+    setUIMode('scan');
+  });
+
+  modeBanterBtn.addEventListener('click', () => {
+    if (uiMode === 'banter') return;
+    setUIMode('banter');
+    // 会話が止まっていたら即再開
+    if (!isBanterRunning && spirits.length >= 2) {
+      banterHistory = [];
+      startBanter();
+    }
+  });
+
+  // ==========================================
+  // 起動: カメラ即時開始・音声は初回タップでアンロック
   // ==========================================
 
   window.addEventListener('resize', () => {
     if (isScanning) syncOverlayCanvas();
   });
 
-  const startOverlay = document.getElementById('start-overlay');
-  const startBtn = document.getElementById('start-btn');
+  showToast('タップして音声ON', true);
 
-  startBtn.addEventListener('click', async () => {
-    // ユーザー操作起点でオーディオを強制アンロック
-    if (!banterAudio) banterAudio = new Audio();
-    banterAudio.src = SILENT_WAV;
-    try {
-      await banterAudio.play();
-      audioUnlocked = true;
-    } catch (e) {
-      console.warn('Audio auto-unlock failed:', e);
-    }
+  // ===== デバッグ表示 =====
+  const debugEl = document.getElementById('debug-overlay');
+  setInterval(() => {
+    if (!debugEl) return;
+    const lines = [
+      `mode:    ${mode} / ui: ${uiMode}`,
+      `spirits: ${spirits.length}  visible: ${visibleTargets.size}`,
+      `scan:    ${isScanning ? '▶' : '—'}  compile: ${isCompiling ? '⏳' : '—'}  req: ${isRequestPending ? '⏳' : '—'}`,
+      `banter:  ${isBanterRunning ? '▶' : '—'}  audio: ${audioUnlocked ? '✓' : '✗'}`,
+      `detect:  ${detectedTarget ? detectedTarget.name : '—'}`,
+      `gaze:    ${gazeStartTime ? Math.round((Date.now() - gazeStartTime) / 100) / 10 + 's' : '—'}`,
+    ];
+    debugEl.textContent = lines.join('\n');
+  }, 200);
 
-    // スタート画面をフェードアウト
-    startOverlay.style.opacity = '0';
-    setTimeout(() => startOverlay.classList.add('hidden'), 500);
-
-    // カメラとスキャンの開始
+  (async () => {
     const started = await startCamera();
     if (started) startScanning();
-    enableTapFreeAudio();
-  });
+  })();
 
-  restartBanterBtn.addEventListener('click', () => {
-    banterHistory = [];
-    startBanter();
-  });
+  // ===== Service Worker: アップデート検知 =====
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', () => {
+          // 新しいSWがインストール済みで、かつ既存SWが動いている = アップデートあり
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            showToast('アップデートがあります — タップして再起動', true);
+            toastDiv.style.pointerEvents = 'auto';
+            toastDiv.style.cursor = 'pointer';
+            toastDiv.addEventListener('click', () => {
+              toastDiv.style.pointerEvents = '';
+              toastDiv.style.cursor = '';
+              newWorker.postMessage('SKIP_WAITING');
+            }, { once: true });
+          }
+        });
+      });
+    }).catch(() => {});
+
+    // SWが切り替わったらページをリロードして新バージョンを適用
+    let swRefreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!swRefreshing) { swRefreshing = true; window.location.reload(); }
+    });
+  }
 });

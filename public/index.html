@@ -4,6 +4,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <meta charset="utf-8" />
     <title>AR Agents 2 - 精霊召喚プロトタイプ</title>
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#0b0f19" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AR Agents 2" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -11,15 +17,6 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- スタート画面（音声アンロック用） -->
-    <div id="start-overlay">
-      <div class="start-box">
-        <h1>AR Agents 2</h1>
-        <p>器に精霊を宿らせ、ARで対話させましょう</p>
-        <button id="start-btn">🔮 探索を開始する</button>
-      </div>
-    </div>
-
     <!-- ARシーン (背面) -->
     <div id="ar-scene-container"></div>
 
@@ -44,8 +41,9 @@
 
       <div id="toast" class="hidden"></div>
 
-      <div id="ar-controls" class="hidden">
-        <button id="restart-banter-btn">💬 もう一度会話させる</button>
+      <div id="mode-toggle" class="hidden">
+        <button id="mode-scan-btn" class="mode-btn active">スキャン</button>
+        <button id="mode-banter-btn" class="mode-btn">会話</button>
       </div>
     </div>
 
@@ -59,6 +57,7 @@
     </div>
 
     <canvas id="snapshot-canvas" style="display:none;"></canvas>
+    <div id="debug-overlay"></div>
 
     <script src="app.js"></script>
   </body>

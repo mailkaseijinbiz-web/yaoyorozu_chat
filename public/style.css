@@ -16,6 +16,24 @@ html, body {
 
 .hidden { display: none !important; }
 
+/* ===== デバッグオーバーレイ ===== */
+#debug-overlay {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 200;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 6px 9px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: pre;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
 /* ===== レイヤー構成 ===== */
 #ar-scene-container {
   position: fixed;
@@ -192,85 +210,38 @@ html, body {
   font-weight: bold;
 }
 
-/* ===== スタート画面 ===== */
-#start-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: radial-gradient(circle at center, #151c30 0%, #070a12 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.5s ease-out;
-}
-.start-box {
-  text-align: center;
-  padding: 40px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  max-width: 90%;
-  width: 380px;
-}
-.start-box h1 {
-  font-size: 28px;
-  margin-bottom: 12px;
-  background: linear-gradient(135deg, #00e5ff, #7c4dff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: 1px;
-}
-.start-box p {
-  font-size: 14px;
-  color: #a0aec0;
-  margin-bottom: 30px;
-}
-#start-btn {
-  background: linear-gradient(135deg, #00e5ff, #7c4dff);
-  border: none;
-  color: #fff;
-  font-size: 16px;
-  font-weight: bold;
-  padding: 14px 28px;
-  border-radius: 30px;
-  cursor: pointer;
-  box-shadow: 0 8px 20px rgba(124, 77, 255, 0.4);
-  transition: transform 0.2s, box-shadow 0.2s;
-  outline: none;
-  width: 100%;
-}
-#start-btn:active {
-  transform: scale(0.96);
-  box-shadow: 0 4px 10px rgba(124, 77, 255, 0.3);
-}
-
-/* ===== ARコントロールボタン ===== */
-#ar-controls {
+/* ===== モード切替トグル ===== */
+#mode-toggle {
   position: absolute;
-  bottom: 15%;
+  bottom: 7%;
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
   pointer-events: auto;
+  display: flex;
+  background: rgba(11, 15, 25, 0.80);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 30px;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
-#restart-banter-btn {
-  background: rgba(11, 15, 25, 0.85);
-  border: 2px solid #7c4dff;
-  color: #fff;
+.mode-btn {
+  padding: 11px 26px;
   font-size: 14px;
   font-weight: bold;
-  padding: 12px 24px;
-  border-radius: 24px;
+  color: rgba(255, 255, 255, 0.45);
+  border: none;
+  background: transparent;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(124, 77, 255, 0.3);
-  transition: transform 0.2s, background 0.2s;
   outline: none;
+  transition: color 0.22s;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
 }
-#restart-banter-btn:active {
-  transform: scale(0.95);
-  background: #7c4dff;
+.mode-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(124,77,255,0.35));
+  border-radius: 28px;
 }
