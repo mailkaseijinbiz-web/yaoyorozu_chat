@@ -1212,9 +1212,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (visible.length < 2) {
       pendingTurn = null;
       spirits.forEach((_, i) => hideSpeechBubble(i));
+      // ヒント表示: 精霊を探しているときにユーザーを誘導する
+      if (mode === 'ar' && uiMode === 'banter') {
+        if (visible.length === 0) {
+          scanStatus.textContent = `精霊たちをカメラに向けてください`;
+        } else {
+          const missingIdx = spirits.findIndex((_, i) => !visibleTargets.has(i));
+          const missingName = missingIdx >= 0 ? spirits[missingIdx].name : '精霊';
+          scanStatus.textContent = `${missingName}をカメラに向けてください`;
+        }
+      }
       banterTimeout = setTimeout(() => runBanterTurn(session), 700);
       return;
     }
+    scanStatus.textContent = '';
 
     const turn = await (pendingTurn || fetchTurn(visible));
     pendingTurn = null;
@@ -1417,10 +1428,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   modeBanterBtn.addEventListener('click', () => {
-    if (uiMode === 'banter') return;
     setUIMode('banter');
-    // 会話が止まっていたら即再開
-    if (!isBanterRunning && spirits.length >= 2) {
+    if (spirits.length >= 2) {
+      // 再タップでも強制リスタート (スタック時の回復手段)
+      stopBanterLoop();
       banterHistory = [];
       startBanter();
     }
