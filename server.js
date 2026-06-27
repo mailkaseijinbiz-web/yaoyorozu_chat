@@ -10,13 +10,242 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// ==========================================
+// 通信ログ: PCコンソール＋ webview (/logs) でライブ表示できるようにする
+// ==========================================
+function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+const LOG_MAX = 500;
+const logBuffer = [];          // 直近のログ行(リングバッファ)
+const logClients = new Set();  // /logs を開いているSSE接続
+function pushLog(line) {
+  console.log(line);
+  logBuffer.push(line);
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+  for (const res of logClients) {
+    try { res.write(`data: ${line.replace(/\n/g, ' ')}\n\n`); } catch (e) {}
+  }
+}
+
+// ログ自身のエンドポイントは記録しない(ノイズ/無限化防止)
+function isLogPath(p) {
+  return p === '/api/clientlog' || p.indexOf('/api/logs') === 0;
+}
+
+// サーバーが受けた全APIリクエストを method/path/status/所要時間 でログ
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/') || isLogPath(req.path)) return next();
+  const start = Date.now();
+  res.on('finish', () => {
+    pushLog(`[NET ${ts()}] ${req.method} ${req.path} -> ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+// クライアント(スマホ)側のfetchイベント/エラーを受けてログへ流す
+app.post('/api/clientlog', (req, res) => {
+  const line = req.body && typeof req.body.line === 'string' ? req.body.line : '';
+  if (line) pushLog(`[CLIENT ${ts()}] ${line.slice(0, 500)}`);
+  res.json({ ok: true });
+});
+
+// 直近ログのJSON(ポーリング用フォールバック)
+app.get('/api/logs', (req, res) => res.json({ logs: logBuffer }));
+
+// ライブ配信 (Server-Sent Events)
+app.get('/api/logs/stream', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+  if (res.flushHeaders) res.flushHeaders();
+  res.write('retry: 3000\n\n');
+  logBuffer.forEach((l) => res.write(`data: ${l}\n\n`));   // 既存分を先に送る
+  logClients.add(res);
+  const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 15000);
+  req.on('close', () => { clearInterval(ping); logClients.delete(res); });
+});
+
+// ログ閲覧ページ (webview)
+app.get('/logs', (req, res) => {
+  res.type('html').send(LOG_PAGE_HTML);
+});
+
+const LOG_PAGE_HTML = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Comm Log</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: #0b0f19; color: #d7dce5;
+    font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .mono { font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace; }
+
+  header { position: sticky; top: 0; z-index: 5; background: rgba(11,15,25,.97); border-bottom: 1px solid #1e2636; }
+  .top { display: flex; align-items: center; gap: 8px; padding: 9px 12px; }
+  .top b { font-size: 14px; font-weight: 600; color: #fff; }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: #f85149; flex: none; box-shadow: 0 0 6px #f85149; }
+  #dot.live { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+  .sp { flex: 1; }
+  .stat { font-size: 12px; color: #8b95a7; }
+  .stat .e { color: #f85149; }
+
+  .ctrl { display: flex; gap: 6px; padding: 0 12px 9px; flex-wrap: wrap; align-items: center; }
+  button { font: inherit; font-size: 12px; color: #cbd3e1; background: #182033; border: 1px solid #2a3550;
+    border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  input#q { flex: 1; min-width: 120px; font: inherit; font-size: 12px; color: #d7dce5; background: #0e1422;
+    border: 1px solid #2a3550; border-radius: 999px; padding: 6px 12px; outline: none; }
+  input#q::placeholder { color: #5b667c; }
+
+  #log { padding: 4px 0 60px; }
+  .row { display: grid; grid-template-columns: 70px 58px auto 1fr auto auto; gap: 8px; align-items: baseline;
+    padding: 6px 12px; border-bottom: 1px solid #121a28; font-size: 12.5px; }
+  .row:hover { background: #0e1422; }
+  .time { color: #5f6b80; font-size: 11px; }
+  .badge { justify-self: start; font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 2px 7px;
+    border-radius: 999px; text-transform: uppercase; }
+  .b-net { background: #10263f; color: #79c0ff; } .b-client { background: #3a2412; color: #f0a35e; }
+  .method { color: #8b95a7; font-size: 11px; font-weight: 600; }
+  .path { color: #c9d1e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .path.seg { color: #56d4c4; } .path.ban { color: #c08bff; } .path.tts { color: #ff8bce; } .path.blob { color: #76808f; }
+  .status { justify-self: end; font-weight: 700; font-size: 12px; min-width: 34px; text-align: right; }
+  .s-ok { color: #3fb950; } .s-redir { color: #79c0ff; } .s-warn { color: #d29922; } .s-err { color: #f85149; }
+  .ms { justify-self: end; color: #7d8799; min-width: 56px; text-align: right; }
+  .ms.m1 { color: #d29922; } .ms.m2 { color: #f0883e; } .ms.m3 { color: #f85149; font-weight: 600; }
+  .raw { grid-column: 1 / -1; color: #9aa4b6; }
+  .hide { display: none !important; }
+  #empty { color: #5f6b80; padding: 18px 12px; }
+</style></head>
+<body>
+  <header>
+    <div class="top">
+      <span id="dot"></span><b>Comm Log</b>
+      <span class="sp"></span>
+      <span class="stat"><span id="count">0</span> · <span class="e" id="errc">0</span> err</span>
+    </div>
+    <div class="ctrl">
+      <button class="filt on" data-f="all">All</button>
+      <button class="filt" data-f="net">NET</button>
+      <button class="filt" data-f="client">CLIENT</button>
+      <button class="filt" data-f="err">Errors</button>
+      <input id="q" placeholder="filter path…" />
+      <button id="auto" class="on">Auto-scroll</button>
+      <button id="clear">Clear</button>
+    </div>
+  </header>
+  <div id="log"><div id="empty">Waiting for traffic… open the app and interact.</div></div>
+<script>
+  var logEl = document.getElementById('log');
+  var emptyEl = document.getElementById('empty');
+  var countEl = document.getElementById('count');
+  var errEl = document.getElementById('errc');
+  var dot = document.getElementById('dot');
+  var autoBtn = document.getElementById('auto');
+  var qEl = document.getElementById('q');
+  var auto = true, n = 0, errs = 0, filter = 'all', q = '';
+  var MAXROWS = 1000;
+
+  autoBtn.onclick = function () { auto = !auto; autoBtn.classList.toggle('on', auto); if (auto) scrollEnd(); };
+  document.getElementById('clear').onclick = function () {
+    logEl.innerHTML = ''; n = 0; errs = 0; countEl.textContent = '0'; errEl.textContent = '0';
+  };
+  var filtBtns = document.querySelectorAll('.filt');
+  for (var i = 0; i < filtBtns.length; i++) filtBtns[i].onclick = function () {
+    filter = this.getAttribute('data-f');
+    for (var j = 0; j < filtBtns.length; j++) filtBtns[j].classList.toggle('on', filtBtns[j] === this);
+    applyAll();
+  };
+  qEl.oninput = function () { q = this.value.toLowerCase(); applyAll(); };
+
+  function scrollEnd() { window.scrollTo(0, document.body.scrollHeight); }
+  function matches(row) {
+    if (filter === 'net' && row.dataset.src !== 'net') return false;
+    if (filter === 'client' && row.dataset.src !== 'client') return false;
+    if (filter === 'err' && row.dataset.err !== '1') return false;
+    if (q && row.dataset.path.indexOf(q) === -1) return false;
+    return true;
+  }
+  function applyAll() {
+    var rows = logEl.children;
+    for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('hide', !matches(rows[i]));
+  }
+
+  function statusClass(s) {
+    if (/^ERR/.test(s)) return 's-err';
+    var c = parseInt(s, 10);
+    if (c >= 500 || isNaN(c)) return 's-err';
+    if (c >= 400) return 's-warn';
+    if (c >= 300) return 's-redir';
+    return 's-ok';
+  }
+  function msClass(ms) { return ms >= 5000 ? 'm3' : ms >= 2000 ? 'm2' : ms >= 800 ? 'm1' : ''; }
+  function pathClass(p) {
+    if (p.indexOf('segment') !== -1) return 'seg';
+    if (p.indexOf('banter') !== -1) return 'ban';
+    if (p.indexOf('tts') !== -1) return 'tts';
+    if (p.indexOf('blob:') === 0) return 'blob';
+    return '';
+  }
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+
+  function add(line) {
+    if (emptyEl) { emptyEl.remove(); emptyEl = null; }
+    var m = line.match(/^\\[(NET|CLIENT) ([0-9:.]+)\\] (\\S+) (\\S+) -> (.+) ([0-9]+)ms$/);
+    var row = el('div', 'row');
+    if (!m) {
+      row.appendChild(el('span', 'raw mono', line));
+      row.dataset.src = 'net'; row.dataset.path = line.toLowerCase(); row.dataset.err = '0';
+    } else {
+      var src = m[1].toLowerCase(), time = m[2], method = m[3], path = m[4], status = m[5], ms = parseInt(m[6], 10);
+      var isErr = /^ERR/.test(status) || parseInt(status, 10) >= 400;
+      row.dataset.src = src; row.dataset.path = path.toLowerCase(); row.dataset.err = isErr ? '1' : '0';
+      row.appendChild(el('span', 'time mono', time));
+      row.appendChild(el('span', 'badge ' + (src === 'net' ? 'b-net' : 'b-client'), src));
+      row.appendChild(el('span', 'method', method));
+      var p = el('span', 'path mono ' + pathClass(path), path); p.title = path; row.appendChild(p);
+      row.appendChild(el('span', 'status ' + statusClass(status), status));
+      row.appendChild(el('span', 'ms mono ' + msClass(ms), ms + 'ms'));
+      if (isErr) errs++;
+    }
+    row.classList.toggle('hide', !matches(row));
+    logEl.appendChild(row);
+    while (logEl.children.length > MAXROWS) logEl.removeChild(logEl.firstChild);
+    n++; countEl.textContent = String(n); errEl.textContent = String(errs);
+    if (auto) scrollEnd();
+  }
+  function connect() {
+    var es = new EventSource('/api/logs/stream');
+    es.onopen = function () { dot.classList.add('live'); };
+    es.onmessage = function (e) { add(e.data); };
+    es.onerror = function () { dot.classList.remove('live'); };
+  }
+  connect();
+</script>
+</body></html>`;
+
+// ==========================================
+// 言語設定 (English基準＋日本語含む6言語)
+// ==========================================
+const LANG_NAMES = { en: 'English', ja: 'Japanese', zh: 'Simplified Chinese', ko: 'Korean', es: 'Spanish', fr: 'French' };
+function langName(code) { return LANG_NAMES[code] || 'English'; }
 
 // ==========================================
 // OpenRouter (OpenAI互換API) — google/gemma-3-27b-it
 // ==========================================
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-3-27b-it';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// 推論プロバイダの優先順位 (例: "Cerebras" や "Cerebras,Groq")。
+// 既定は Cerebras を優先。指定モデルをそのプロバイダが提供していなければ
+// allow_fallbacks=true により他プロバイダへ自動フォールバックする。
+const OPENROUTER_PROVIDERS = (process.env.OPENROUTER_PROVIDER || 'Cerebras')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const OPENROUTER_ALLOW_FALLBACKS = process.env.OPENROUTER_ALLOW_FALLBACKS !== 'false';
 
 const hasApiKey = !!process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your_openrouter_api_key_here';
 
@@ -38,7 +267,9 @@ async function callOpenRouter({ messages, temperature }) {
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
       messages,
-      ...(temperature != null ? { temperature } : {})
+      ...(temperature != null ? { temperature } : {}),
+      // 推論プロバイダのルーティング(Cerebras優先)
+      ...(OPENROUTER_PROVIDERS.length ? { provider: { order: OPENROUTER_PROVIDERS, allow_fallbacks: OPENROUTER_ALLOW_FALLBACKS } } : {})
     })
   });
 
@@ -52,6 +283,8 @@ async function callOpenRouter({ messages, temperature }) {
   if (typeof text !== 'string') {
     throw new Error(`OpenRouter returned no text content: ${JSON.stringify(data)}`);
   }
+  // 実際に推論を担当したプロバイダをログ(Cerebrasが使われたか確認できる)
+  if (data && data.provider) pushLog(`[LLM ${ts()}] ${OPENROUTER_MODEL} via ${data.provider}`);
   return text;
 }
 
@@ -83,7 +316,7 @@ const DEMO_VESSELS = [
 let demoSegmentCount = 0;
 
 app.post('/api/segment-vessels', async (req, res) => {
-  const { image } = req.body;
+  const { image, language } = req.body;
   if (!image) {
     return res.status(400).json({ error: 'Image data is required' });
   }
@@ -121,7 +354,7 @@ Output ONLY the following JSON structure (no preamble, no explanation, no code f
     }
   ]
 }
-If there are no suitable objects, set "targets" to an empty array.`;
+If there are no suitable objects, set "targets" to an empty array.${language && language !== 'en' ? `\nIMPORTANT: Write "name", "spiritName" and "personality" in ${langName(language)} (use that language's native script). Keep "voice" and "box" exactly as specified.` : ''}`;
 
     const text = await callOpenRouter({
       messages: [
@@ -148,7 +381,33 @@ If there are no suitable objects, set "targets" to an empty array.`;
 // 精霊同士のBanter (N体対応)
 // ==========================================
 
+function buildSoloPrompt(spirit, turnCount, situation) {
+  const s = spirit;
+  const sitText = situation
+    ? `Current situation:\n- Place: ${situation.location || 'in a room'}\n- Weather / time: ${situation.weather || 'clear skies'}`
+    : '';
+  return `You write short, funny solo lines (a monologue) for a single spirit that inhabits an everyday object. It talks to itself and to whoever is watching.
+
+The spirit:
+- Spirit name: ${s.name || 'Spirit'}
+- Vessel it inhabits: ${s.vessel || 'a mysterious vessel'}
+- Character: ${s.personality || 'cheerful and talkative'}
+
+${sitText}
+
+Based on what it has already said, write its next line.
+
+Rules:
+1. Keep it short (1-2 sentences, max ~80 characters). Snappy and full of personality.
+2. Be humorous — a witty quip, an observation about its vessel, or a grumble about the situation (place/weather).
+3. Stay in character (personality, manner of speech, how it refers to itself).
+4. Vary the topic line to line so it doesn't get repetitive. Talk to the viewer sometimes.
+5. Set isEnd to true only occasionally, to wrap a little bit with a punchline; otherwise false.
+6. Return JSON only — no preamble or explanation.`;
+}
+
 function buildBanterPrompt(spirits, newcomer, turnCount, situation) {
+  if (spirits.length === 1) return buildSoloPrompt(spirits[0], turnCount, situation);
   const cast = spirits.map((s, i) =>
     `[Spirit ${i} (agent${i})]
 - Spirit name: ${s.name || `Spirit ${i}`}
@@ -196,23 +455,37 @@ Rules:
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { spirits, history, newcomer, situation } = req.body;
+  const { spirits, history, newcomer, situation, forceSpeaker, language } = req.body;
 
-  if (!spirits || !Array.isArray(spirits) || spirits.length < 2) {
-    return res.status(400).json({ error: 'At least 2 spirits are required' });
+  if (!spirits || !Array.isArray(spirits) || spirits.length < 1) {
+    return res.status(400).json({ error: 'At least 1 spirit is required' });
   }
 
   const agentIds = spirits.map((_, i) => `agent${i}`);
   const turnCount = history ? history.length : 0;
 
+  // forceSpeaker: タップで指定された話者(agentN)。有効なら必ずその精霊にしゃべらせる。
+  const forcedIdx = (typeof forceSpeaker === 'string' && agentIds.includes(forceSpeaker))
+    ? parseInt(forceSpeaker.replace('agent', ''), 10) : -1;
+
   if (!hasApiKey) {
-    const speaker = turnCount % spirits.length;
-    const targetName = spirits[(speaker + 1) % spirits.length].name;
-    const demoLines = [
-      { reply: `Oh, if it isn't ${targetName}! How've you been?`, ttsReply: `Oh, if it isn't ${targetName}! How've you been?`, isEnd: false },
-      { reply: `Whoa! Don't just talk to me out of nowhere... you scared me!`, ttsReply: `Whoa! Don't just talk to me out of nowhere... you scared me!`, isEnd: false },
-      { reply: `Ha ha! Alright, that's enough! Thanks, everyone!`, ttsReply: `Ha ha! Alright, that's enough! Thanks, everyone!`, isEnd: true }
-    ];
+    const speaker = forcedIdx >= 0 ? forcedIdx : turnCount % spirits.length;
+    let demoLines;
+    if (spirits.length === 1) {
+      // ソロ(1体)用のデモ独り言
+      demoLines = [
+        { reply: `Ahh, another day stuck as ${spirits[0].name}. Riveting.`, ttsReply: `Ahh, another day stuck as ${spirits[0].name}. Riveting.`, isEnd: false },
+        { reply: `Is anyone even watching me? Hello? ...Typical.`, ttsReply: `Is anyone even watching me? Hello? Typical.`, isEnd: false },
+        { reply: `Well, that's my whole bit. Tip your spirits!`, ttsReply: `Well, that's my whole bit. Tip your spirits!`, isEnd: true }
+      ];
+    } else {
+      const targetName = spirits[(speaker + 1) % spirits.length].name;
+      demoLines = [
+        { reply: `Oh, if it isn't ${targetName}! How've you been?`, ttsReply: `Oh, if it isn't ${targetName}! How've you been?`, isEnd: false },
+        { reply: `Whoa! Don't just talk to me out of nowhere... you scared me!`, ttsReply: `Whoa! Don't just talk to me out of nowhere... you scared me!`, isEnd: false },
+        { reply: `Ha ha! Alright, that's enough! Thanks, everyone!`, ttsReply: `Ha ha! Alright, that's enough! Thanks, everyone!`, isEnd: true }
+      ];
+    }
     const line = demoLines[turnCount % demoLines.length];
     return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: line.reply, ttsReply: line.ttsReply, isEnd: line.isEnd });
   }
@@ -236,22 +509,46 @@ app.post('/api/banter', async (req, res) => {
     }
     conversation += '\nGenerate the next turn of the conversation (the speaker and their line).';
 
+    const lang = langName(language);
+    const nonEn = !!(language && language !== 'en');
+    const replyLangNote = nonEn ? `in ${lang}` : 'English';
+    const ttsNote = language === 'ja'
+      ? 'A reading for text-to-speech written ONLY in hiragana/katakana and spaces (no kanji), reproducing the correct Japanese pronunciation. "！" and "？" are fine.'
+      : (nonEn
+        ? `A spoken-out version of the line for text-to-speech in ${lang}: spell out any symbols or abbreviations so they read aloud correctly.`
+        : `A spoken-out version of the line for text-to-speech: plain natural English, spelling out any symbols or abbreviations so they read aloud correctly. '!' and '?' are fine to keep.`);
+
     const jsonSpec = `Output ONLY the following JSON structure (no preamble, no explanation, no code fences):
 {
   "nextSpeaker": one of ${JSON.stringify(agentIds)} (the ID of the spirit who speaks next),
-  "reply": "What they say. An emotionally expressive, short English line (1-2 sentences, max ~80 chars)",
-  "ttsReply": "A spoken-out version of the line for text-to-speech: plain natural English, spelling out any symbols or abbreviations so they read aloud correctly. '!' and '?' are fine to keep.",
+  "reply": "What they say. An emotionally expressive, short line ${replyLangNote} (1-2 sentences, max ~80 chars)",
+  "ttsReply": "${ttsNote}",
   "isEnd": true or false (true only if this is the closing punchline that ends the conversation, otherwise false)
 }`;
+
+    // 出力言語の指定(English以外)
+    const langInstruction = nonEn
+      ? `\n\nIMPORTANT: Write "reply" and "ttsReply" entirely in ${lang} (use that language's native script), staying in each spirit's character.`
+      : '';
+
+    // タップで話者が指定された場合は、その精霊に必ずしゃべらせる
+    const forceInstruction = forcedIdx >= 0
+      ? `\n\nIMPORTANT: The next speaker MUST be ${forceSpeaker} (${spirits[forcedIdx].name}). Set "nextSpeaker" to "${forceSpeaker}" and write the line in that spirit's voice. Do NOT end the conversation here ("isEnd" must be false).`
+      : '';
 
     const text = await callOpenRouter({
       temperature: 1.0,
       messages: [
-        { role: 'user', content: systemPrompt + '\n\n' + conversation + '\n\n' + jsonSpec }
+        { role: 'user', content: systemPrompt + '\n\n' + conversation + langInstruction + forceInstruction + '\n\n' + jsonSpec }
       ]
     });
 
     const data = parseJSONSafe(text);
+    // 指定話者が確実に反映されるようサーバー側でも上書き
+    if (forcedIdx >= 0) {
+      data.nextSpeaker = forceSpeaker;
+      data.isEnd = false;
+    }
     console.log('Banter:', JSON.stringify(data));
     res.json(data);
   } catch (error) {

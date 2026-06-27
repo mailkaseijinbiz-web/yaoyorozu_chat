@@ -54,6 +54,8 @@
       </div>
 
       <button id="reset-btn" class="hidden">Reset</button>
+
+      <button id="settings-btn" aria-label="Settings">⚙</button>
     </div>
 
     <!-- 注入フラッシュ -->
@@ -74,7 +76,44 @@
           Summoned spirits: <span id="spirit-panel-count">0</span>
           <button id="spirit-panel-close">✕</button>
         </div>
+        <button id="panel-chat-btn">Start conversation</button>
+        <div id="panel-chat" class="hidden"></div>
         <div id="spirit-list"></div>
+      </div>
+    </div>
+
+    <!-- 設定パネル -->
+    <div id="settings-panel">
+      <div id="settings-backdrop"></div>
+      <div id="settings-sheet">
+        <div class="spirit-panel-handle"></div>
+        <div class="spirit-panel-title">
+          Settings
+          <button id="settings-close">✕</button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-label">Language</div>
+          <select id="lang-select" class="settings-select"></select>
+        </div>
+        <div class="settings-hint">Spirits' names and speech are generated in this language.</div>
+
+        <div class="settings-row">
+          <div class="settings-label">Voice (TTS)</div>
+          <div class="settings-seg">
+            <button id="tts-elevenlabs" class="seg-btn active">ElevenLabs</button>
+            <button id="tts-standalone" class="seg-btn">On-device</button>
+          </div>
+        </div>
+        <div class="settings-hint" id="tts-hint">High-quality cloud voices (needs ElevenLabs API key).</div>
+
+        <div class="settings-row">
+          <div class="settings-label">Scan</div>
+          <div class="settings-seg">
+            <button id="scan-auto" class="seg-btn">Auto</button>
+            <button id="scan-manual" class="seg-btn active">Manual</button>
+          </div>
+        </div>
+        <div class="settings-hint" id="scan-hint">Tap the screen to scan one object at a time.</div>
       </div>
     </div>
 
