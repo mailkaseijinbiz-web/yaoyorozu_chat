@@ -162,6 +162,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let gazeSig = null; // すり替え判定の基準シグネチャ。凝視中は毎周期その時点のフレームへ更新する(runScanCycle参照)
 
   let compiledMindUrl = null;
+  let compiledMindBuffer = null; // 直前のコンパイル済みArrayBuffer (差分コンパイル用)
+  let compiledSpiritCount = 0;  // 直前コンパイル時の精霊数
   const visibleTargets = new Set();          // 実際にMindARでトラッキング中の精霊index
   // 会話判定用の「猶予付き」可視集合。トラッキングが一瞬切れても少しの間は映っている扱いにし、
   // ARの追跡ブレで会話が止まったり、なかなか始まらなくなるのを防ぐ。
@@ -198,6 +200,48 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       return [];
     }
+  }
+
+  // ==========================================
+  // MindARコンパイルキャッシュ (IndexedDB)
+  // ページ再読み込み時に同じ精霊セットなら再コンパイルをスキップする
+  // ==========================================
+  function mindCacheKey(spList) {
+    // 各精霊のvessel名 + base64画像の先頭64文字でキーを生成 (十分ユニーク)
+    return spList.map(s => `${s.vessel}|${s.image.slice(23, 87)}`).join('::');
+  }
+  function getMindCache(key) {
+    return new Promise((resolve) => {
+      try {
+        const req = indexedDB.open('yaorozu_mind', 1);
+        req.onupgradeneeded = (e) => e.target.result.createObjectStore('cache');
+        req.onsuccess = (e) => {
+          try {
+            const gr = e.target.result.transaction('cache', 'readonly').objectStore('cache').get('v1');
+            gr.onsuccess = () => { const d = gr.result; resolve(d && d.key === key ? d.buffer : null); };
+            gr.onerror = () => resolve(null);
+          } catch (_) { resolve(null); }
+        };
+        req.onerror = () => resolve(null);
+      } catch (_) { resolve(null); }
+    });
+  }
+  function setMindCache(key, buffer) {
+    try {
+      const req = indexedDB.open('yaorozu_mind', 1);
+      req.onupgradeneeded = (e) => e.target.result.createObjectStore('cache');
+      req.onsuccess = (e) => {
+        try { e.target.result.transaction('cache', 'readwrite').objectStore('cache').put({ key, buffer }, 'v1'); } catch (_) {}
+      };
+    } catch (_) {}
+  }
+  function clearMindCache() {
+    try {
+      const req = indexedDB.open('yaorozu_mind', 1);
+      req.onsuccess = (e) => {
+        try { e.target.result.transaction('cache', 'readwrite').objectStore('cache').clear(); } catch (_) {}
+      };
+    } catch (_) {}
   }
 
   function updateSpiritCountBtn() {
@@ -1158,14 +1202,47 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      const imgs = await Promise.all(spirits.map(s => loadImage(s.image)));
-      const compiler = new window.MINDAR.IMAGE.Compiler();
-      await compiler.compileImageTargets(imgs, (p) => {
-        // recompile中はオーバーレイ非表示なのでloadingTextへの書き込みは無害
-        // MindARの進捗pは0〜100(%)で渡ってくるのでそのまま使う(以前は*100で10000%になっていた)
-        loadingText.textContent = `Extracting soul... ${Math.min(100, Math.round(p))}%`;
-      });
-      const buffer = await compiler.exportData();
+      // コンパイル戦略: キャッシュ → 差分 → フルコンパイル の順でフォールバック
+      const cacheKey = mindCacheKey(spirits);
+      let buffer = await getMindCache(cacheKey);
+
+      if (buffer) {
+        // IndexedDBキャッシュヒット: 再コンパイル不要
+        loadingText.textContent = 'Restoring spirits...';
+      } else if (recompile && compiledMindBuffer && compiledSpiritCount > 0 && spirits.length > compiledSpiritCount) {
+        // 差分コンパイル: 新規精霊分だけコンパイルし、以前の結果とマージ
+        try {
+          const newImgs = await Promise.all(spirits.slice(compiledSpiritCount).map(s => loadImage(s.image)));
+          const newCompiler = new window.MINDAR.IMAGE.Compiler();
+          await newCompiler.compileImageTargets(newImgs, (p) => {
+            loadingText.textContent = `Summoning... ${Math.min(100, Math.round(p))}%`;
+          });
+          const prevCompiler = new window.MINDAR.IMAGE.Compiler();
+          prevCompiler.importData(compiledMindBuffer);
+          prevCompiler.targetList = [...prevCompiler.targetList, ...newCompiler.targetList];
+          buffer = await prevCompiler.exportData();
+        } catch (e) {
+          console.warn('Incremental compile failed, falling back to full compile:', e);
+          buffer = null;
+        }
+      }
+
+      if (!buffer) {
+        // フルコンパイル (初回 / 差分不可 / 精霊削除後)
+        const imgs = await Promise.all(spirits.map(s => loadImage(s.image)));
+        const compiler = new window.MINDAR.IMAGE.Compiler();
+        await compiler.compileImageTargets(imgs, (p) => {
+          // recompile中はオーバーレイ非表示なのでloadingTextへの書き込みは無害
+          loadingText.textContent = `Extracting soul... ${Math.min(100, Math.round(p))}%`;
+        });
+        buffer = await compiler.exportData();
+      }
+
+      // 次回の差分コンパイルとキャッシュのために保存
+      compiledMindBuffer = buffer.slice ? buffer.slice(0) : buffer;
+      compiledSpiritCount = spirits.length;
+      setMindCache(cacheKey, compiledMindBuffer); // 非同期・fire-and-forget
+
       if (compiledMindUrl) URL.revokeObjectURL(compiledMindUrl);
       compiledMindUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
 
@@ -2079,6 +2156,9 @@ document.addEventListener('DOMContentLoaded', () => {
     banterTurns = 0;
     lastBanterErr = '—';
     if (compiledMindUrl) { URL.revokeObjectURL(compiledMindUrl); compiledMindUrl = null; }
+    compiledMindBuffer = null;
+    compiledSpiritCount = 0;
+    clearMindCache();
     localStorage.removeItem(SPIRIT_STORAGE_KEY);
 
     mode = 'scan';
