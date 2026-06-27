@@ -353,43 +353,168 @@
     .cerebras-inner h2 { margin-bottom: 16px; }
     .cerebras-inner p { color: var(--muted); font-size: 16px; line-height: 1.7; margin-bottom: 12px; }
     .cerebras-inner p:last-child { margin-bottom: 0; }
-    .speed-card {
-      background: rgba(255,255,255,.04);
-      border: 1px solid rgba(0,229,255,.2);
-      border-radius: 24px; padding: 36px 32px;
-      box-shadow: 0 0 60px rgba(0,229,255,.08), inset 0 1px 0 rgba(255,255,255,.06);
-    }
-    .speed-meter {
-      margin-bottom: 28px;
-    }
-    .speed-meter-label {
-      display: flex; justify-content: space-between; align-items: baseline;
-      font-size: 12px; color: var(--muted); margin-bottom: 8px;
-    }
-    .speed-meter-label strong { color: var(--text); font-size: 14px; }
-    .speed-bar-track {
-      height: 8px; background: rgba(255,255,255,.06); border-radius: 100px; overflow: hidden;
-    }
-    .speed-bar-fill {
-      height: 100%; border-radius: 100px;
-      background: linear-gradient(90deg, var(--accent2), var(--accent1));
-      animation: barGrow 1.8s cubic-bezier(.4,0,.2,1) both;
-    }
     @keyframes barGrow {
       from { width: 0; }
     }
-    .speed-stats {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+
+    /* ── COMPARISON CARD ── */
+    .cmp-card {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(0,229,255,.2);
+      border-radius: 24px; padding: 28px 24px;
+      box-shadow: 0 0 60px rgba(0,229,255,.08), inset 0 1px 0 rgba(255,255,255,.06);
     }
-    .speed-stat {
+    .cmp-header {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-bottom: 22px;
+    }
+    .cmp-col-head {
+      text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .6px;
+      text-transform: uppercase; padding: 7px 10px; border-radius: 8px;
+    }
+    .cmp-col-head.cerebras {
+      background: rgba(0,229,255,.12); color: var(--accent1);
+      border: 1px solid rgba(0,229,255,.25);
+    }
+    .cmp-col-head.std {
+      background: rgba(255,255,255,.04); color: var(--muted);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .cmp-metric { margin-bottom: 18px; }
+    .cmp-metric:last-of-type { margin-bottom: 0; }
+    .cmp-metric-label {
+      font-size: 11px; color: var(--muted); font-weight: 600;
+      letter-spacing: .4px; text-transform: uppercase; margin-bottom: 8px;
+    }
+    .cmp-vals {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .cmp-val {
+      border-radius: 10px; padding: 10px 12px; text-align: center; line-height: 1;
+    }
+    .cmp-val.cerebras {
+      background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.2);
+      font-family: 'Bangers', sans-serif; font-size: 22px; color: var(--accent1);
+    }
+    .cmp-val.std {
       background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-      border-radius: 14px; padding: 16px;
+      font-size: 15px; font-weight: 600; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
     }
-    .speed-stat .num {
-      font-family: 'Bangers', sans-serif; font-size: 28px; line-height: 1;
-      color: var(--accent1); display: block; margin-bottom: 4px;
+    .cmp-bar-group { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+    .cmp-bar-row { display: flex; align-items: center; gap: 8px; }
+    .cmp-bar-who { font-size: 9px; width: 64px; color: var(--muted); text-align: right; flex-shrink: 0; }
+    .cmp-bar-track { flex: 1; height: 5px; background: rgba(255,255,255,.06); border-radius: 100px; overflow: hidden; }
+    .cmp-bar-fill { height: 100%; border-radius: 100px; animation: barGrow 1.8s cubic-bezier(.4,0,.2,1) both; }
+    .cmp-bar-fill.c { background: linear-gradient(90deg, var(--accent2), var(--accent1)); }
+    .cmp-bar-fill.s { background: rgba(255,255,255,.18); }
+    .cmp-badge {
+      margin-top: 20px; padding: 11px 14px;
+      background: linear-gradient(135deg, rgba(0,229,255,.12), rgba(124,77,255,.15));
+      border: 1px solid rgba(0,229,255,.2); border-radius: 12px;
+      text-align: center; font-weight: 700; font-size: 13px; color: var(--accent1);
     }
-    .speed-stat .desc { font-size: 11px; color: var(--muted); }
+
+    /* ── USE CASES ── */
+    .usecase-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .uc-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color .25s, transform .2s;
+    }
+    .uc-card:hover { border-color: rgba(124,77,255,.4); transform: translateY(-3px); }
+
+    /* Photo area */
+    .uc-img-wrap {
+      position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden;
+      background: linear-gradient(135deg, #1a1f35, #0d1222);
+    }
+    .uc-img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block; transition: transform .4s;
+    }
+    .uc-card:hover .uc-img { transform: scale(1.04); }
+    .uc-img-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,.25) 0%, rgba(7,9,15,.55) 100%);
+    }
+
+    /* Scene badge — top left */
+    .uc-img-badge {
+      position: absolute; top: 12px; left: 14px;
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(0,0,0,.45);
+      backdrop-filter: blur(8px);
+      padding: 5px 10px 5px 8px; border-radius: 100px;
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .uc-icon { font-size: 16px; line-height: 1; }
+    .uc-scene-name { font-weight: 700; font-size: 12px; color: #fff; }
+    .uc-scene-sub { font-size: 9px; color: rgba(255,255,255,.55); }
+
+    /* Placeholder */
+    .uc-placeholder {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    }
+    .uc-placeholder-icon { font-size: 36px; opacity: .4; }
+    .uc-placeholder-label {
+      font-size: 10px; font-weight: 600; letter-spacing: .5px;
+      text-transform: uppercase; color: rgba(255,255,255,.2);
+    }
+
+    /* Bubbles overlaid on photo */
+    .uc-bubbles {
+      position: absolute; bottom: 14px; left: 12px; right: 12px;
+      display: flex; flex-direction: column; gap: 7px;
+      pointer-events: none;
+    }
+    .uc-bubble {
+      background: rgba(255,255,255,.93);
+      backdrop-filter: blur(4px);
+      border-radius: 10px;
+      padding: 6px 10px; color: #111;
+      font-family: 'Bangers', sans-serif;
+      font-size: 15px; line-height: 1.25;
+      display: inline-block;
+      max-width: 82%; align-self: flex-start;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+    .uc-bubble.right { align-self: flex-end; }
+    .uc-bubble-who {
+      font-family: 'Inter', sans-serif;
+      font-size: 8px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .4px; color: rgba(0,0,0,.45); margin-bottom: 1px;
+    }
+    .uc-bubble.b-yellow { border-left: 3px solid #ffd740; }
+    .uc-bubble.b-cyan   { border-left: 3px solid #00e5ff; }
+    .uc-bubble.b-purple { border-left: 3px solid #7c4dff; }
+    .uc-bubble.b-green  { border-left: 3px solid #69f0ae; }
+    .uc-bubble.b-orange { border-left: 3px solid #ff9100; }
+    .uc-bubble.b-pink   { border-left: 3px solid #ff4081; }
+    .uc-bubble.right.b-yellow { border-left: none; border-right: 3px solid #ffd740; }
+    .uc-bubble.right.b-cyan   { border-left: none; border-right: 3px solid #00e5ff; }
+    .uc-bubble.right.b-purple { border-left: none; border-right: 3px solid #7c4dff; }
+    .uc-bubble.right.b-green  { border-left: none; border-right: 3px solid #69f0ae; }
+    .uc-bubble.right.b-orange { border-left: none; border-right: 3px solid #ff9100; }
+    .uc-bubble.right.b-pink   { border-left: none; border-right: 3px solid #ff4081; }
+
+    /* Bubble entrance animation */
+    @keyframes bubbleIn {
+      from { opacity: 0; transform: translateY(14px) scale(.96); }
+      to   { opacity: 1; transform: translateY(0)   scale(1); }
+    }
+    .uc-bubble {
+      opacity: 0;
+    }
+    .uc-bubble.popped {
+      animation: bubbleIn .45s cubic-bezier(.22,.68,0,1.2) both;
+    }
 
     @media (max-width: 700px) {
       .cerebras-inner { grid-template-columns: 1fr; gap: 36px; }
@@ -513,45 +638,161 @@
           before you've even lowered your phone.
         </p>
       </div>
-      <div class="speed-card">
-        <div class="speed-meter">
-          <div class="speed-meter-label">
-            <strong>Spirit generation</strong>
-            <span style="color:var(--accent1); font-weight:700">&lt; 1 sec</span>
+      <div class="cmp-card">
+        <div class="cmp-header">
+          <div class="cmp-col-head cerebras">⚡ Cerebras</div>
+          <div class="cmp-col-head std">Standard GPU</div>
+        </div>
+
+        <!-- Spirit generation -->
+        <div class="cmp-metric">
+          <div class="cmp-metric-label">Spirit generation &nbsp;↓ lower is faster</div>
+          <div class="cmp-vals">
+            <div class="cmp-val cerebras">&lt; 1 sec</div>
+            <div class="cmp-val std">~8 sec</div>
           </div>
-          <div class="speed-bar-track">
-            <div class="speed-bar-fill" style="width:92%"></div>
+          <div class="cmp-bar-group">
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Cerebras</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="width:12%; animation-delay:.1s"></div></div>
+            </div>
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Standard</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="width:95%; animation-delay:.3s"></div></div>
+            </div>
           </div>
         </div>
-        <div class="speed-meter">
-          <div class="speed-meter-label">
-            <strong>Banter response</strong>
-            <span style="color:var(--accent1); font-weight:700">&lt; 800 ms</span>
+
+        <!-- Banter response -->
+        <div class="cmp-metric">
+          <div class="cmp-metric-label">Banter response &nbsp;↓ lower is faster</div>
+          <div class="cmp-vals">
+            <div class="cmp-val cerebras">&lt; 800ms</div>
+            <div class="cmp-val std">~5 sec</div>
           </div>
-          <div class="speed-bar-track">
-            <div class="speed-bar-fill" style="width:96%; animation-delay:.3s"></div>
+          <div class="cmp-bar-group">
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Cerebras</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="width:15%; animation-delay:.2s"></div></div>
+            </div>
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Standard</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="width:95%; animation-delay:.4s"></div></div>
+            </div>
           </div>
         </div>
-        <div class="speed-meter" style="margin-bottom:0">
-          <div class="speed-meter-label">
-            <strong>Image recognition</strong>
-            <span style="color:var(--accent1); font-weight:700">&lt; 2 sec</span>
+
+        <div class="cmp-badge">⚡ Up to 25× faster than standard GPU inference</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section>
+  <div class="container">
+    <span class="section-tag">Use Cases</span>
+    <h2>Scan Anything.<br><span style="color:var(--accent2)">Every Object Has a Story.</span></h2>
+    <p class="section-sub">Spirits take on personalities shaped by what they are — and where you find them.</p>
+
+    <div class="usecase-grid">
+
+      <div class="uc-card">
+        <div class="uc-img-wrap">
+          <img src="/lp/images/morning-desk.jpg" alt="Morning Desk" class="uc-img" onload="this.nextElementSibling.style.display='none'">
+          <div class="uc-placeholder"><span class="uc-placeholder-icon">☕</span><span class="uc-placeholder-label">morning-desk.jpg</span></div>
+          <div class="uc-img-overlay"></div>
+          <div class="uc-img-badge">
+            <span class="uc-icon">☕</span>
+            <div><div class="uc-scene-name">Morning Desk</div></div>
           </div>
-          <div class="speed-bar-track">
-            <div class="speed-bar-fill" style="width:80%; animation-delay:.6s"></div>
-          </div>
-        </div>
-        <div class="speed-stats" style="margin-top:24px">
-          <div class="speed-stat">
-            <span class="num">~2k</span>
-            <span class="desc">tokens / second</span>
-          </div>
-          <div class="speed-stat">
-            <span class="num">0</span>
-            <span class="desc">cold-start delay</span>
+          <div class="uc-bubbles">
+            <div class="uc-bubble b-yellow"><div class="uc-bubble-who">Coffee Mug</div>YOU LOOK TIRED. DRINK ME.</div>
+            <div class="uc-bubble b-cyan right"><div class="uc-bubble-who">Keyboard</div>THIRD EMAIL BEFORE 9AM. I RESPECT THAT.</div>
           </div>
         </div>
       </div>
+
+      <div class="uc-card">
+        <div class="uc-img-wrap">
+          <img src="/lp/images/kitchen.jpg" alt="Kitchen" class="uc-img" onload="this.nextElementSibling.style.display='none'">
+          <div class="uc-placeholder"><span class="uc-placeholder-icon">🍳</span><span class="uc-placeholder-label">kitchen.jpg</span></div>
+          <div class="uc-img-overlay"></div>
+          <div class="uc-img-badge">
+            <span class="uc-icon">🍳</span>
+            <div><div class="uc-scene-name">Kitchen</div></div>
+          </div>
+          <div class="uc-bubbles">
+            <div class="uc-bubble b-orange"><div class="uc-bubble-who">Kettle</div>I'M BOILING WITH EXCITEMENT. LITERALLY.</div>
+            <div class="uc-bubble b-purple right"><div class="uc-bubble-who">Fridge</div>EVERY MORNING. THE SAME DRAMA.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="uc-card">
+        <div class="uc-img-wrap">
+          <img src="/lp/images/study.jpg" alt="Study Session" class="uc-img" onload="this.nextElementSibling.style.display='none'">
+          <div class="uc-placeholder"><span class="uc-placeholder-icon">📚</span><span class="uc-placeholder-label">study.jpg</span></div>
+          <div class="uc-img-overlay"></div>
+          <div class="uc-img-badge">
+            <span class="uc-icon">📚</span>
+            <div><div class="uc-scene-name">Study Session</div></div>
+          </div>
+          <div class="uc-bubbles">
+            <div class="uc-bubble b-cyan"><div class="uc-bubble-who">Textbook</div>PAGE 247. YOU'VE GOT THIS. PROBABLY.</div>
+            <div class="uc-bubble b-pink right"><div class="uc-bubble-who">Pen</div>I'VE SURVIVED WORSE ESSAYS. WE'LL BE FINE.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="uc-card">
+        <div class="uc-img-wrap">
+          <img src="/lp/images/travel.jpg" alt="Traveling" class="uc-img" onload="this.nextElementSibling.style.display='none'">
+          <div class="uc-placeholder"><span class="uc-placeholder-icon">✈️</span><span class="uc-placeholder-label">travel.jpg</span></div>
+          <div class="uc-img-overlay"></div>
+          <div class="uc-img-badge">
+            <span class="uc-icon">✈️</span>
+            <div><div class="uc-scene-name">Traveling</div></div>
+          </div>
+          <div class="uc-bubbles">
+            <div class="uc-bubble b-green"><div class="uc-bubble-who">Luggage</div>I'VE SEEN YOUR PACKING. NO COMMENT.</div>
+            <div class="uc-bubble b-yellow right"><div class="uc-bubble-who">Passport</div>ANOTHER STAMP. ANOTHER STORY.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="uc-card">
+        <div class="uc-img-wrap">
+          <img src="/lp/images/late-night.jpg" alt="Late Night" class="uc-img" onload="this.nextElementSibling.style.display='none'">
+          <div class="uc-placeholder"><span class="uc-placeholder-icon">🌙</span><span class="uc-placeholder-label">late-night.jpg</span></div>
+          <div class="uc-img-overlay"></div>
+          <div class="uc-img-badge">
+            <span class="uc-icon">🌙</span>
+            <div><div class="uc-scene-name">Late Night</div></div>
+          </div>
+          <div class="uc-bubbles">
+            <div class="uc-bubble b-purple"><div class="uc-bubble-who">Lamp</div>STILL HERE. WE BOTH ARE.</div>
+            <div class="uc-bubble b-cyan right"><div class="uc-bubble-who">Phone</div>PUT ME DOWN. YOU WON'T.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="uc-card">
+        <div class="uc-img-wrap">
+          <img src="/lp/images/city.jpg" alt="Out in the City" class="uc-img" onload="this.nextElementSibling.style.display='none'">
+          <div class="uc-placeholder"><span class="uc-placeholder-icon">🏙️</span><span class="uc-placeholder-label">city.jpg</span></div>
+          <div class="uc-img-overlay"></div>
+          <div class="uc-img-badge">
+            <span class="uc-icon">🏙️</span>
+            <div><div class="uc-scene-name">Out in the City</div></div>
+          </div>
+          <div class="uc-bubbles">
+            <div class="uc-bubble b-orange"><div class="uc-bubble-who">Vending Machine</div>DECISIONS, DECISIONS. I'VE SEEN THEM ALL.</div>
+            <div class="uc-bubble b-pink right"><div class="uc-bubble-who">Street Sign</div>YOU'VE BEEN STANDING HERE 10 MINUTES.</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </section>
@@ -571,45 +812,40 @@
 <!-- FEATURES -->
 <section class="features-bg">
   <div class="container">
-    <span class="section-tag">Features</span>
-    <h2>Built for the<br><span style="color:var(--accent3)">Real World.</span></h2>
-    <p class="section-sub">Every detail designed for the uncanny experience of objects that talk back.</p>
+    <span class="section-tag">Why You'll Love It</span>
+    <h2>The World Gets<br><span style="color:var(--accent3)">More Interesting.</span></h2>
+    <p class="section-sub">Everyday objects become characters. Every room becomes a story.</p>
 
     <div class="features-grid">
       <div class="feature">
-        <span class="feature-icon">🌐</span>
-        <h3>6 Languages</h3>
-        <p>English, 日本語, 中文, 한국어, Español, Français. Spirits speak — and think — in your language.</p>
+        <span class="feature-icon">🌍</span>
+        <h3>Feels Like Your Language</h3>
+        <p>Spirits don't translate — they think in your language from the start. English, 日本語, 中文, 한국어, Español, Français.</p>
       </div>
       <div class="feature">
-        <span class="feature-icon">💬</span>
-        <h3>Speech Bubbles</h3>
-        <p>Stylized speech bubbles with elastic pop animation and typewriter text — floating right above each spirit's vessel.</p>
+        <span class="feature-icon">👁️</span>
+        <h3>Right There in Your World</h3>
+        <p>Speech bubbles float above the object in AR space — as if the spirit has always lived inside it.</p>
       </div>
       <div class="feature">
-        <span class="feature-icon">🎙️</span>
-        <h3>Live Voice</h3>
-        <p>ElevenLabs cloud TTS or on-device Web Speech API. Mute individual spirits anytime.</p>
-      </div>
-      <div class="feature" style="border-color:rgba(0,229,255,.3); background:rgba(0,229,255,.04); grid-column: span 2;">
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-          <span class="feature-icon" style="margin-bottom:0">⚡</span>
-          <div>
-            <h3 style="font-size:17px;">Cerebras-Powered Inference</h3>
-            <span style="font-size:11px; color:var(--accent1); font-weight:600; letter-spacing:.5px;">THE FASTEST AI CHIP ON EARTH</span>
-          </div>
-        </div>
-        <p>Cerebras wafer-scale chips deliver ~2,000 tokens/sec — orders of magnitude faster than GPU-based inference. Spirits think, speak, and banter with no perceptible delay, turning AR into a truly seamless conversation.</p>
+        <span class="feature-icon">🔊</span>
+        <h3>You'll Actually Hear Them</h3>
+        <p>Each spirit speaks with its own voice. Not a readout — a personality with attitude, in your language.</p>
       </div>
       <div class="feature">
-        <span class="feature-icon">📋</span>
-        <h3>Spirit Roster</h3>
-        <p>All summoned spirits saved locally. Open the list to start a conversation anywhere — no camera needed.</p>
+        <span class="feature-icon">⚡</span>
+        <h3>Instant. No Waiting.</h3>
+        <p>Most apps make you wait. Here, spirits respond before you've finished looking at the object — powered by Cerebras.</p>
       </div>
       <div class="feature">
-        <span class="feature-icon">🔇</span>
-        <h3>Mute Control</h3>
-        <p>Tap 🔊 on any spirit to mute it. Text bubbles still appear; only voice is silenced.</p>
+        <span class="feature-icon">📂</span>
+        <h3>A Growing Collection</h3>
+        <p>Every spirit you summon stays in your roster. Revisit them anytime — no camera needed — and pick up where you left off.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">✨</span>
+        <h3>No Setup. Just Scan.</h3>
+        <p>No markers to print, no accounts to create. Open the app, point your camera, and the magic starts immediately.</p>
       </div>
     </div>
   </div>
@@ -620,14 +856,9 @@
   <div class="container">
     <div class="cta-banner">
       <h2>Ready to Summon?</h2>
-      <p>Works on any HTTPS browser with a camera — iPhone, Android, desktop. No install needed.</p>
+      <p>Works on any browser with a camera — iPhone, Android, desktop. No install needed.</p>
       <div class="cta-qr-row">
         <a href="/" class="btn-primary" style="font-size:18px; padding:18px 44px;">Open the App →</a>
-        <div class="qr-hint">
-          <span>Or visit directly</span>
-          <span class="url-chip">ar-agents-2.vercel.app</span>
-          <span style="margin-top:4px; font-size:11px;">HTTPS required for camera access on mobile</span>
-        </div>
       </div>
     </div>
   </div>
@@ -635,16 +866,24 @@
 
 <!-- FOOTER -->
 <footer>
-  <p>
-    Built with <a href="https://openrouter.ai" target="_blank" rel="noopener">OpenRouter</a> ·
-    <a href="https://hiukim.github.io/mind-ar-js-doc/" target="_blank" rel="noopener">MindAR</a> ·
-    <a href="https://aframe.io" target="_blank" rel="noopener">A-Frame</a> ·
-    <a href="https://elevenlabs.io" target="_blank" rel="noopener">ElevenLabs</a>
-    &nbsp;·&nbsp;
-    <a href="https://github.com/mailkaseijinbiz-web/ar_agents_2" target="_blank" rel="noopener">GitHub</a>
-  </p>
-  <p style="margin-top:8px; font-size:11px;">© 2026 Yaorozu. Prototype — for demo purposes.</p>
+  <p style="font-size:11px;">© 2026 Yaorozu.</p>
 </footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const bubbles = entry.target.querySelectorAll('.uc-bubble');
+      bubbles.forEach((b, i) => {
+        b.style.animationDelay = (i * 0.18) + 's';
+        b.classList.add('popped');
+      });
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: 0.3 });
+
+  document.querySelectorAll('.uc-card').forEach(card => observer.observe(card));
+</script>
 
 </body>
 </html>
