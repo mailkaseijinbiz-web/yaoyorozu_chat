@@ -2,7 +2,6 @@ const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
 const cors = require('cors');
-const { GoogleGenAI } = require('@google/genai');
 
 dotenv.config({ override: true });
 
@@ -11,13 +10,282 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// ==========================================
+// 通信ログ: PCコンソール＋ webview (/logs) でライブ表示できるようにする
+// ==========================================
+function ts() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+const LOG_MAX = 500;
+const logBuffer = [];          // 直近のログ行(リングバッファ)
+const logClients = new Set();  // /logs を開いているSSE接続
+function pushLog(line) {
+  console.log(line);
+  logBuffer.push(line);
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+  for (const res of logClients) {
+    try { res.write(`data: ${line.replace(/\n/g, ' ')}\n\n`); } catch (e) {}
+  }
+}
+
+// ログ自身のエンドポイントは記録しない(ノイズ/無限化防止)
+function isLogPath(p) {
+  return p === '/api/clientlog' || p.indexOf('/api/logs') === 0;
+}
+
+// サーバーが受けた全APIリクエストを method/path/status/所要時間 でログ
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/') || isLogPath(req.path)) return next();
+  const start = Date.now();
+  res.on('finish', () => {
+    pushLog(`[NET ${ts()}] ${req.method} ${req.path} -> ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-const hasApiKey = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here';
-const ai = hasApiKey ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+// クライアント(スマホ)側のfetchイベント/エラーを受けてログへ流す
+app.post('/api/clientlog', (req, res) => {
+  const line = req.body && typeof req.body.line === 'string' ? req.body.line : '';
+  if (line) pushLog(`[CLIENT ${ts()}] ${line.slice(0, 500)}`);
+  res.json({ ok: true });
+});
+
+// 直近ログのJSON(ポーリング用フォールバック)
+app.get('/api/logs', (req, res) => res.json({ logs: logBuffer }));
+
+// ライブ配信 (Server-Sent Events)
+app.get('/api/logs/stream', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+  if (res.flushHeaders) res.flushHeaders();
+  res.write('retry: 3000\n\n');
+  logBuffer.forEach((l) => res.write(`data: ${l}\n\n`));   // 既存分を先に送る
+  logClients.add(res);
+  const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 15000);
+  req.on('close', () => { clearInterval(ping); logClients.delete(res); });
+});
+
+// ログ閲覧ページ (webview)
+app.get('/logs', (req, res) => {
+  res.type('html').send(LOG_PAGE_HTML);
+});
+
+const LOG_PAGE_HTML = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Comm Log</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: #0b0f19; color: #d7dce5;
+    font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .mono { font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace; }
+
+  header { position: sticky; top: 0; z-index: 5; background: rgba(11,15,25,.97); border-bottom: 1px solid #1e2636; }
+  .top { display: flex; align-items: center; gap: 8px; padding: 9px 12px; }
+  .top b { font-size: 14px; font-weight: 600; color: #fff; }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: #f85149; flex: none; box-shadow: 0 0 6px #f85149; }
+  #dot.live { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+  .sp { flex: 1; }
+  .stat { font-size: 12px; color: #8b95a7; }
+  .stat .e { color: #f85149; }
+
+  .ctrl { display: flex; gap: 6px; padding: 0 12px 9px; flex-wrap: wrap; align-items: center; }
+  button { font: inherit; font-size: 12px; color: #cbd3e1; background: #182033; border: 1px solid #2a3550;
+    border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  input#q { flex: 1; min-width: 120px; font: inherit; font-size: 12px; color: #d7dce5; background: #0e1422;
+    border: 1px solid #2a3550; border-radius: 999px; padding: 6px 12px; outline: none; }
+  input#q::placeholder { color: #5b667c; }
+
+  #log { padding: 4px 0 60px; }
+  .row { display: grid; grid-template-columns: 70px 58px auto 1fr auto auto; gap: 8px; align-items: baseline;
+    padding: 6px 12px; border-bottom: 1px solid #121a28; font-size: 12.5px; }
+  .row:hover { background: #0e1422; }
+  .time { color: #5f6b80; font-size: 11px; }
+  .badge { justify-self: start; font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 2px 7px;
+    border-radius: 999px; text-transform: uppercase; }
+  .b-net { background: #10263f; color: #79c0ff; } .b-client { background: #3a2412; color: #f0a35e; }
+  .method { color: #8b95a7; font-size: 11px; font-weight: 600; }
+  .path { color: #c9d1e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .path.seg { color: #56d4c4; } .path.ban { color: #c08bff; } .path.tts { color: #ff8bce; } .path.blob { color: #76808f; }
+  .status { justify-self: end; font-weight: 700; font-size: 12px; min-width: 34px; text-align: right; }
+  .s-ok { color: #3fb950; } .s-redir { color: #79c0ff; } .s-warn { color: #d29922; } .s-err { color: #f85149; }
+  .ms { justify-self: end; color: #7d8799; min-width: 56px; text-align: right; }
+  .ms.m1 { color: #d29922; } .ms.m2 { color: #f0883e; } .ms.m3 { color: #f85149; font-weight: 600; }
+  .raw { grid-column: 1 / -1; color: #9aa4b6; }
+  .hide { display: none !important; }
+  #empty { color: #5f6b80; padding: 18px 12px; }
+</style></head>
+<body>
+  <header>
+    <div class="top">
+      <span id="dot"></span><b>Comm Log</b>
+      <span class="sp"></span>
+      <span class="stat"><span id="count">0</span> · <span class="e" id="errc">0</span> err</span>
+    </div>
+    <div class="ctrl">
+      <button class="filt on" data-f="all">All</button>
+      <button class="filt" data-f="net">NET</button>
+      <button class="filt" data-f="client">CLIENT</button>
+      <button class="filt" data-f="err">Errors</button>
+      <input id="q" placeholder="filter path…" />
+      <button id="auto" class="on">Auto-scroll</button>
+      <button id="clear">Clear</button>
+    </div>
+  </header>
+  <div id="log"><div id="empty">Waiting for traffic… open the app and interact.</div></div>
+<script>
+  var logEl = document.getElementById('log');
+  var emptyEl = document.getElementById('empty');
+  var countEl = document.getElementById('count');
+  var errEl = document.getElementById('errc');
+  var dot = document.getElementById('dot');
+  var autoBtn = document.getElementById('auto');
+  var qEl = document.getElementById('q');
+  var auto = true, n = 0, errs = 0, filter = 'all', q = '';
+  var MAXROWS = 1000;
+
+  autoBtn.onclick = function () { auto = !auto; autoBtn.classList.toggle('on', auto); if (auto) scrollEnd(); };
+  document.getElementById('clear').onclick = function () {
+    logEl.innerHTML = ''; n = 0; errs = 0; countEl.textContent = '0'; errEl.textContent = '0';
+  };
+  var filtBtns = document.querySelectorAll('.filt');
+  for (var i = 0; i < filtBtns.length; i++) filtBtns[i].onclick = function () {
+    filter = this.getAttribute('data-f');
+    for (var j = 0; j < filtBtns.length; j++) filtBtns[j].classList.toggle('on', filtBtns[j] === this);
+    applyAll();
+  };
+  qEl.oninput = function () { q = this.value.toLowerCase(); applyAll(); };
+
+  function scrollEnd() { window.scrollTo(0, document.body.scrollHeight); }
+  function matches(row) {
+    if (filter === 'net' && row.dataset.src !== 'net') return false;
+    if (filter === 'client' && row.dataset.src !== 'client') return false;
+    if (filter === 'err' && row.dataset.err !== '1') return false;
+    if (q && row.dataset.path.indexOf(q) === -1) return false;
+    return true;
+  }
+  function applyAll() {
+    var rows = logEl.children;
+    for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('hide', !matches(rows[i]));
+  }
+
+  function statusClass(s) {
+    if (/^ERR/.test(s)) return 's-err';
+    var c = parseInt(s, 10);
+    if (c >= 500 || isNaN(c)) return 's-err';
+    if (c >= 400) return 's-warn';
+    if (c >= 300) return 's-redir';
+    return 's-ok';
+  }
+  function msClass(ms) { return ms >= 5000 ? 'm3' : ms >= 2000 ? 'm2' : ms >= 800 ? 'm1' : ''; }
+  function pathClass(p) {
+    if (p.indexOf('segment') !== -1) return 'seg';
+    if (p.indexOf('banter') !== -1) return 'ban';
+    if (p.indexOf('tts') !== -1) return 'tts';
+    if (p.indexOf('blob:') === 0) return 'blob';
+    return '';
+  }
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+
+  function add(line) {
+    if (emptyEl) { emptyEl.remove(); emptyEl = null; }
+    var m = line.match(/^\\[(NET|CLIENT) ([0-9:.]+)\\] (\\S+) (\\S+) -> (.+) ([0-9]+)ms$/);
+    var row = el('div', 'row');
+    if (!m) {
+      row.appendChild(el('span', 'raw mono', line));
+      row.dataset.src = 'net'; row.dataset.path = line.toLowerCase(); row.dataset.err = '0';
+    } else {
+      var src = m[1].toLowerCase(), time = m[2], method = m[3], path = m[4], status = m[5], ms = parseInt(m[6], 10);
+      var isErr = /^ERR/.test(status) || parseInt(status, 10) >= 400;
+      row.dataset.src = src; row.dataset.path = path.toLowerCase(); row.dataset.err = isErr ? '1' : '0';
+      row.appendChild(el('span', 'time mono', time));
+      row.appendChild(el('span', 'badge ' + (src === 'net' ? 'b-net' : 'b-client'), src));
+      row.appendChild(el('span', 'method', method));
+      var p = el('span', 'path mono ' + pathClass(path), path); p.title = path; row.appendChild(p);
+      row.appendChild(el('span', 'status ' + statusClass(status), status));
+      row.appendChild(el('span', 'ms mono ' + msClass(ms), ms + 'ms'));
+      if (isErr) errs++;
+    }
+    row.classList.toggle('hide', !matches(row));
+    logEl.appendChild(row);
+    while (logEl.children.length > MAXROWS) logEl.removeChild(logEl.firstChild);
+    n++; countEl.textContent = String(n); errEl.textContent = String(errs);
+    if (auto) scrollEnd();
+  }
+  function connect() {
+    var es = new EventSource('/api/logs/stream');
+    es.onopen = function () { dot.classList.add('live'); };
+    es.onmessage = function (e) { add(e.data); };
+    es.onerror = function () { dot.classList.remove('live'); };
+  }
+  connect();
+</script>
+</body></html>`;
+
+// ==========================================
+// 言語設定 (English基準＋日本語含む6言語)
+// ==========================================
+const LANG_NAMES = { en: 'English', ja: 'Japanese', zh: 'Simplified Chinese', ko: 'Korean', es: 'Spanish', fr: 'French' };
+function langName(code) { return LANG_NAMES[code] || 'English'; }
+
+// ==========================================
+// OpenRouter (OpenAI互換API) — google/gemma-3-27b-it
+// ==========================================
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-3-27b-it';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// 推論プロバイダの優先順位 (例: "Cerebras" や "Cerebras,Groq")。
+// 既定は Cerebras を優先。指定モデルをそのプロバイダが提供していなければ
+// allow_fallbacks=true により他プロバイダへ自動フォールバックする。
+const OPENROUTER_PROVIDERS = (process.env.OPENROUTER_PROVIDER || 'Cerebras')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const OPENROUTER_ALLOW_FALLBACKS = process.env.OPENROUTER_ALLOW_FALLBACKS !== 'false';
+
+const hasApiKey = !!process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your_openrouter_api_key_here';
 
 if (!hasApiKey) {
-  console.warn('GEMINI_API_KEY が未設定のため、デモモード（固定レスポンス）で起動します。');
+  console.warn('OPENROUTER_API_KEY is not set — starting in DEMO mode (fixed responses).');
+}
+
+// OpenRouterのchat completionsを呼び、本文テキストを返す。
+// Gemmaはレスポンススキーマ非対応のため、JSON整形はプロンプト指示＋parseJSONSafeで担保する。
+async function callOpenRouter({ messages, temperature }) {
+  const response = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://github.com/yaorozu-chat',
+      'X-Title': 'Yaorozu Chat'
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages,
+      ...(temperature != null ? { temperature } : {}),
+      // 推論プロバイダのルーティング(Cerebras優先)
+      ...(OPENROUTER_PROVIDERS.length ? { provider: { order: OPENROUTER_PROVIDERS, allow_fallbacks: OPENROUTER_ALLOW_FALLBACKS } } : {})
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`OpenRouter API failed (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string') {
+    throw new Error(`OpenRouter returned no text content: ${JSON.stringify(data)}`);
+  }
+  // 実際に推論を担当したプロバイダをログ(Cerebrasが使われたか確認できる)
+  if (data && data.provider) pushLog(`[LLM ${ts()}] ${OPENROUTER_MODEL} via ${data.provider}`);
+  return text;
 }
 
 function parseJSONSafe(text) {
@@ -40,54 +308,15 @@ function parseJSONSafe(text) {
 // 物体検出 + 動的精霊名 + キャラ付け (スキャン)
 // ==========================================
 
-const segmentResponseSchema = {
-  type: 'OBJECT',
-  properties: {
-    targets: {
-      type: 'ARRAY',
-      description: '画像内でARターゲットとして適した対象物（最大3つ）。適切な対象物がなければ空配列。',
-      items: {
-        type: 'OBJECT',
-        properties: {
-          name: {
-            type: 'STRING',
-            description: '対象物の短い日本語名（15文字以内、例: 「青い空き缶」「目覚まし時計」）'
-          },
-          spiritName: {
-            type: 'STRING',
-            description: '対象物のカテゴリを表す「◯◯の精霊」形式の精霊名（日本語、10文字以内）。例: 時計なら「時の精霊」、缶・ボトルなら「ドリンクの精霊」、本・ノートなら「知恵の精霊」、コップ・グラスなら「器の精霊」、キーボードなら「タイピングの精霊」。リストにない物体はその本質を捉えた名前を考案する。'
-          },
-          personality: {
-            type: 'STRING',
-            description: 'その物体の見た目・用途・状態から発想した精霊のキャラ設定（性格・口調・一人称、50文字以内）。例: 目覚まし時計なら「几帳面でせっかち。一人称は私。語尾は〜である。遅刻に厳しい」、空き缶なら「飲み干されて達観している。一人称は俺。気だるい口調」'
-          },
-          voice: {
-            type: 'STRING',
-            enum: ['cool_male', 'genki_girl', 'wise_elder', 'gentle_lady'],
-            description: 'キャラ設定に合う声質。cool_male=クールな男性声(ガジェット・黒物・スポーティな物向き)、genki_girl=元気なアニメ女声(お菓子・カラフルな物・かわいい物向き)、wise_elder=渋く落ち着いた長老声(本・時計・アンティーク向き)、gentle_lady=おっとり優しい女性声(マグカップ・ぬいぐるみ・植物向き)'
-          },
-          box: {
-            type: 'ARRAY',
-            items: { type: 'INTEGER' },
-            description: '[ymin, xmin, ymax, xmax] 0〜1000で規格化されたバウンディングボックス'
-          }
-        },
-        required: ['name', 'spiritName', 'personality', 'voice', 'box']
-      }
-    }
-  },
-  required: ['targets']
-};
-
 const DEMO_VESSELS = [
-  { name: 'デモの青い器', spiritName: 'ドリンクの精霊', personality: '飲み干されて達観している。一人称は俺。気だるい口調', voice: 'cool_male' },
-  { name: 'デモの赤い器', spiritName: '時の精霊', personality: '几帳面でせっかち。一人称は私。語尾は〜である', voice: 'wise_elder' },
-  { name: 'デモの黄色い器', spiritName: 'お菓子の精霊', personality: '甘えん坊でハイテンション。一人称はあたし', voice: 'genki_girl' }
+  { name: 'Demo Blue Vessel', spiritName: 'Spirit of Drinks', personality: 'Drained dry and philosophical. Calls itself "I". Laid-back, weary tone.', voice: 'cool_male' },
+  { name: 'Demo Red Vessel', spiritName: 'Spirit of Time', personality: 'Meticulous and impatient. Calls itself "I". Formal, declarative speech.', voice: 'wise_elder' },
+  { name: 'Demo Yellow Vessel', spiritName: 'Spirit of Sweets', personality: 'Clingy and hyperactive. Calls itself "I". Bubbly, excitable tone.', voice: 'genki_girl' }
 ];
 let demoSegmentCount = 0;
 
 app.post('/api/segment-vessels', async (req, res) => {
-  const { image } = req.body;
+  const { image, language } = req.body;
   if (!image) {
     return res.status(400).json({ error: 'Image data is required' });
   }
@@ -109,31 +338,37 @@ app.post('/api/segment-vessels', async (req, res) => {
   }
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
+    const dataUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${base64Data}`;
+    const prompt = `From the image, detect up to 3 objects that are well suited as AR targets (a logo, a label, or a prominent physical object). List all suitable objects; if there are none, return an empty array.
+Give each object's bounding box as [ymin, xmin, ymax, xmax] (integers normalized to 0-1000, with the top-left corner at [0,0]).
+
+Output ONLY the following JSON structure (no preamble, no explanation, no code fences):
+{
+  "targets": [
+    {
+      "name": "Short English name of the object (max 25 chars), e.g. 'blue empty can', 'alarm clock'",
+      "spiritName": "A spirit name in the form 'Spirit of ___' (max 20 chars). e.g. clock -> Spirit of Time, can/bottle -> Spirit of Drinks, book/notebook -> Spirit of Wisdom, cup/glass -> Spirit of the Vessel, keyboard -> Spirit of Typing. For objects not listed, invent a name that captures the object's essence.",
+      "personality": "A character profile inspired by the object's look, use, and state (dirty/empty/brand-new, etc.): personality, manner of speech, and how it refers to itself (max 100 chars)",
+      "voice": "Exactly one of cool_male | genki_girl | wise_elder | gentle_lady. cool_male=cool male voice (gadgets, black/sporty items), genki_girl=upbeat anime girl voice (sweets, cute/colorful items), wise_elder=gravelly elder voice (books, clocks, antiques), gentle_lady=soft gentle female voice (mugs, plush toys, plants)",
+      "box": [ymin, xmin, ymax, xmax]
+    }
+  ]
+}
+If there are no suitable objects, set "targets" to an empty array.${language && language !== 'en' ? `\nIMPORTANT: Write "name", "spiritName" and "personality" in ${langName(language)} (use that language's native script). Keep "voice" and "box" exactly as specified.` : ''}`;
+
+    const text = await callOpenRouter({
+      messages: [
         {
           role: 'user',
-          parts: [
-            { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
-            {
-              text: `画像の中から、ARターゲット（ロゴ、ラベル、または主要な立体物）として認識・追跡するのに適した対象物を最大3つまで検出してください。対象物が複数ある場合はすべて列挙し、なければ空配列にしてください。
-各対象物のバウンディングボックスを [ymin, xmin, ymax, xmax]（0〜1000の整数規格化座標、左上が[0,0]）で指定し、以下と共にJSONで返してください:
-- name: 日本語の名前（15文字以内）
-- spiritName: そのモノのカテゴリにふさわしい「◯◯の精霊」形式の精霊名（10文字以内）
-- personality: その物体の見た目・用途・状態（汚れ、空っぽ、新品など）から発想したユニークなキャラ設定（性格・口調・一人称、50文字以内）
-- voice: キャラに合う声質`
-            }
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: dataUrl } }
           ]
         }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: segmentResponseSchema
-      }
+      ]
     });
 
-    const data = parseJSONSafe(response.text);
+    const data = parseJSONSafe(text);
     console.log('Detected:', JSON.stringify(data));
     res.json(data);
   } catch (error) {
@@ -146,71 +381,111 @@ app.post('/api/segment-vessels', async (req, res) => {
 // 精霊同士のBanter (N体対応)
 // ==========================================
 
+function buildSoloPrompt(spirit, turnCount, situation) {
+  const s = spirit;
+  const sitText = situation
+    ? `Current situation:\n- Place: ${situation.location || 'in a room'}\n- Weather / time: ${situation.weather || 'clear skies'}`
+    : '';
+  return `You write short, funny solo lines (a monologue) for a single spirit that inhabits an everyday object. It talks to itself and to whoever is watching.
+
+The spirit:
+- Spirit name: ${s.name || 'Spirit'}
+- Vessel it inhabits: ${s.vessel || 'a mysterious vessel'}
+- Character: ${s.personality || 'cheerful and talkative'}
+
+${sitText}
+
+Based on what it has already said, write its next line.
+
+Rules:
+1. Keep it short (1-2 sentences, max ~80 characters). Snappy and full of personality.
+2. Be humorous — a witty quip, an observation about its vessel, or a grumble about the situation (place/weather).
+3. Stay in character (personality, manner of speech, how it refers to itself).
+4. Vary the topic line to line so it doesn't get repetitive. Talk to the viewer sometimes.
+5. Set isEnd to true only occasionally, to wrap a little bit with a punchline; otherwise false.
+6. Return JSON only — no preamble or explanation.`;
+}
+
 function buildBanterPrompt(spirits, newcomer, turnCount, situation) {
+  if (spirits.length === 1) return buildSoloPrompt(spirits[0], turnCount, situation);
   const cast = spirits.map((s, i) =>
-    `【精霊${i} (agent${i})】
-- 精霊名: ${s.name || `精霊${i}`}
-- 宿っている器: ${s.vessel || '不思議な器'}
-- キャラ設定: ${s.personality || '陽気でおしゃべり好き'}`
+    `[Spirit ${i} (agent${i})]
+- Spirit name: ${s.name || `Spirit ${i}`}
+- Vessel it inhabits: ${s.vessel || 'a mysterious vessel'}
+- Character: ${s.personality || 'cheerful and talkative'}`
   ).join('\n\n');
 
-  const sitText = situation 
-    ? `現在のシチュエーション:\n- 場所: ${situation.location || '部屋の中'}\n- 天気・時間: ${situation.weather || '晴れ'}`
+  const sitText = situation
+    ? `Current situation:\n- Place: ${situation.location || 'in a room'}\n- Weather / time: ${situation.weather || 'clear skies'}`
     : '';
 
   // ターン数に応じた起承転結フェーズの指定
   let phaseInstruction = "";
   if (turnCount <= 2) {
-    phaseInstruction = "【起】会話の導入です。お互いの器を自己紹介しつつ、現在のシチュエーション（場所や天気）への言及を交えて、ユーモアたっぷりにスタートしてください。";
+    phaseInstruction = "[Opening] This is the start of the conversation. Have the spirits introduce their vessels while weaving in references to the current situation (place and weather), kicking things off with plenty of humor.";
   } else if (turnCount <= 5) {
-    phaseInstruction = "【承】会話の展開です。彼らの器の「共通点（または対立点）」や「関係性」にフォーカスした話題を1つ見つけ、それをテーマにして相手をいじり合ったり、漫才風のボケとツッコミを展開してください。";
+    phaseInstruction = "[Build-up] Develop the conversation. Find one topic centered on a 'shared trait (or contrast)' or the 'relationship' between their vessels, and use it to tease each other with comedy-duo-style banter (setup and punchline).";
   } else if (turnCount <= 8) {
-    phaseInstruction = "【転】ボケとツッコミをさらに加速させ、話の核心や予期せぬユーモラスなボケをぶつけて大きく盛り上げてください。";
+    phaseInstruction = "[Turn] Accelerate the setups and punchlines even more, hitting the heart of the matter or an unexpected, hilarious joke to really get things going.";
   } else {
-    phaseInstruction = "【結】会話のオチ（締めくくり）です。漫才の終わりのように、ユーモラスなオチをつけて会話を綺麗に締めくくってください（例：「もうええわ！」「いい加減にしろ！」などで締める）。この発言で会話を終了させるため、JSONの isEnd を true にしてください。";
+    phaseInstruction = "[Finale] This is the punchline that wraps up the conversation. Like the end of a comedy routine, land a humorous closing line and tie the conversation off cleanly (e.g. 'Alright, that's enough!', 'Oh, give it a rest!'). Since this line ends the conversation, set isEnd to true in the JSON.";
   }
 
-  return `あなたは複数の物体に宿る精霊たちの、テンポの良い漫才のような掛け合い（会話）を構成する優秀な放送作家です。
-登場精霊は以下の${spirits.length}体です:
+  return `You are a skilled comedy writer composing a snappy, comedy-duo-style back-and-forth between spirits that inhabit everyday objects.
+The ${spirits.length} spirits on stage are:
 
 ${cast}
-${newcomer ? `\n※たった今「${newcomer}」が新しく会話に加わった！みんなで歓迎したりツッコんだりすること。\n` : ''}
+${newcomer ? `\n* "${newcomer}" has just joined the conversation! Have everyone welcome them or tease them.\n` : ''}
 
 ${sitText}
 
-現在の会話フェーズ: ${phaseInstruction}
+Current conversation phase: ${phaseInstruction}
 
-これまでの会話履歴を踏まえて、次の発言者（nextSpeaker）、発言内容（reply）、よみがな（ttsReply）、そして会話を終了するかどうか（isEnd）を決定してください。
+Based on the conversation so far, decide the next speaker (nextSpeaker), what they say (reply), a spoken-out version for TTS (ttsReply), and whether the conversation ends (isEnd).
 
-ルール:
-1. 発言は必ず短く（1〜2文、35文字以内）。テンポ最優先、間延びした説明口調は禁止。
-2. ユーモアにあふれ、漫才のようなツッコミとボケの応酬にすること。
-3. 宿っている器の共通する特徴やテーマを、精霊同士で面白おかしく突っつき合うこと。
-4. 場所や天気（シチュエーション）に合わせた言及やぼやきを会話に自然に織り交ぜること。
-5. 感情豊かに！感嘆詞や「！」「？」「…」を多用して喜怒哀楽と抑揚をはっきり出す。
-6. 各精霊のキャラ設定（性格・口調・一人称）を厳守する。
-7. isEnd は、会話をオチをつけて締めくくる最後の発言でのみ true にしてください。それ以外は必ず false にすること。
-8. JSONのみを返却し、前置きや解説は一切出力しない。`;
+Rules:
+1. Keep every line short (1-2 sentences, max ~80 characters). Tempo first; no long-winded explanatory speech.
+2. Be full of humor — a rapid exchange of setups and punchlines like a comedy duo.
+3. Have the spirits playfully poke at the shared traits or themes of the vessels they inhabit.
+4. Naturally weave in remarks or grumbles that fit the place and weather (the situation).
+5. Be emotionally expressive! Use plenty of interjections and "!", "?", "..." to clearly convey mood and inflection.
+6. Strictly stay in character for each spirit (personality, manner of speech, how it refers to itself).
+7. Set isEnd to true ONLY on the final line that lands a punchline and wraps things up. Otherwise it must always be false.
+8. Return JSON only — no preamble or explanation.`;
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { spirits, history, newcomer, situation } = req.body;
+  const { spirits, history, newcomer, situation, forceSpeaker, language } = req.body;
 
-  if (!spirits || !Array.isArray(spirits) || spirits.length < 2) {
-    return res.status(400).json({ error: 'At least 2 spirits are required' });
+  if (!spirits || !Array.isArray(spirits) || spirits.length < 1) {
+    return res.status(400).json({ error: 'At least 1 spirit is required' });
   }
 
   const agentIds = spirits.map((_, i) => `agent${i}`);
   const turnCount = history ? history.length : 0;
 
+  // forceSpeaker: タップで指定された話者(agentN)。有効なら必ずその精霊にしゃべらせる。
+  const forcedIdx = (typeof forceSpeaker === 'string' && agentIds.includes(forceSpeaker))
+    ? parseInt(forceSpeaker.replace('agent', ''), 10) : -1;
+
   if (!hasApiKey) {
-    const speaker = turnCount % spirits.length;
-    const targetName = spirits[(speaker + 1) % spirits.length].name;
-    const demoLines = [
-      { reply: `おっ、${targetName}じゃないか！元気か？`, ttsReply: `おっ、${targetName}じゃないか！げんきか？`, isEnd: false },
-      { reply: `えっ！？急に話しかけるなよ…びっくりするだろ`, ttsReply: `えっ！？きゅうにはなしかけるなよ…びっくりするだろ`, isEnd: false },
-      { reply: `あはは！もうええわ！ありがとうございました！`, ttsReply: `あはは！もうええわ！ありがとうございました！`, isEnd: true }
-    ];
+    const speaker = forcedIdx >= 0 ? forcedIdx : turnCount % spirits.length;
+    let demoLines;
+    if (spirits.length === 1) {
+      // ソロ(1体)用のデモ独り言
+      demoLines = [
+        { reply: `Ahh, another day stuck as ${spirits[0].name}. Riveting.`, ttsReply: `Ahh, another day stuck as ${spirits[0].name}. Riveting.`, isEnd: false },
+        { reply: `Is anyone even watching me? Hello? ...Typical.`, ttsReply: `Is anyone even watching me? Hello? Typical.`, isEnd: false },
+        { reply: `Well, that's my whole bit. Tip your spirits!`, ttsReply: `Well, that's my whole bit. Tip your spirits!`, isEnd: true }
+      ];
+    } else {
+      const targetName = spirits[(speaker + 1) % spirits.length].name;
+      demoLines = [
+        { reply: `Oh, if it isn't ${targetName}! How've you been?`, ttsReply: `Oh, if it isn't ${targetName}! How've you been?`, isEnd: false },
+        { reply: `Whoa! Don't just talk to me out of nowhere... you scared me!`, ttsReply: `Whoa! Don't just talk to me out of nowhere... you scared me!`, isEnd: false },
+        { reply: `Ha ha! Alright, that's enough! Thanks, everyone!`, ttsReply: `Ha ha! Alright, that's enough! Thanks, everyone!`, isEnd: true }
+      ];
+    }
     const line = demoLines[turnCount % demoLines.length];
     return res.json({ demo: true, nextSpeaker: agentIds[speaker], reply: line.reply, ttsReply: line.ttsReply, isEnd: line.isEnd });
   }
@@ -218,7 +493,7 @@ app.post('/api/banter', async (req, res) => {
   try {
     const systemPrompt = buildBanterPrompt(spirits, newcomer, turnCount, situation);
 
-    let conversation = 'これまでの会話履歴:\n';
+    let conversation = 'Conversation so far:\n';
     if (history && history.length > 0) {
       history.forEach(h => {
         // 新形式は {name, text}。旧形式 {sender:'agentN'} もフォールバックで対応
@@ -227,46 +502,53 @@ app.post('/api/banter', async (req, res) => {
           const idx = parseInt(String(h.sender).replace('agent', ''), 10);
           name = (spirits[idx] && spirits[idx].name) || h.sender;
         }
-        conversation += `${name || '精霊'}: ${h.text}\n`;
+        conversation += `${name || 'Spirit'}: ${h.text}\n`;
       });
     } else {
-      conversation += '(履歴なし。誰かが勢いよく会話の口火を切ること。)\n';
+      conversation += '(No history yet. Have someone kick off the conversation with energy.)\n';
     }
-    conversation += '\n次の会話のターン（発言者とセリフ）を生成してください。';
+    conversation += '\nGenerate the next turn of the conversation (the speaker and their line).';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + conversation }] }],
-      config: {
-        temperature: 1.0,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            nextSpeaker: {
-              type: 'STRING',
-              enum: agentIds,
-              description: '次に発言する精霊のID'
-            },
-            reply: {
-              type: 'STRING',
-              description: '発言内容。感情豊かで短い日本語のセリフ（1〜2文、最大35文字）'
-            },
-            ttsReply: {
-              type: 'STRING',
-              description: 'TTS(音声読み上げ)用のテキスト。漢字を一切使わず、すべて「ひらがな」「カタカナ」と「スペース」のみで正しい発音・読み方を再現すること（例:「時の精霊」→「ときのせいれい」、「器」→「うつわ」、「Gemini」→「じぇみに」）。「！」「？」などは含めてよい。'
-            },
-            isEnd: {
-              type: 'BOOLEAN',
-              description: 'これが会話のオチ（最後の発言）であり、会話を終了する場合は true。それ以外は false。'
-            }
-          },
-          required: ['nextSpeaker', 'reply', 'ttsReply', 'isEnd']
-        }
-      }
+    const lang = langName(language);
+    const nonEn = !!(language && language !== 'en');
+    const replyLangNote = nonEn ? `in ${lang}` : 'English';
+    const ttsNote = language === 'ja'
+      ? 'A reading for text-to-speech written ONLY in hiragana/katakana and spaces (no kanji), reproducing the correct Japanese pronunciation. "！" and "？" are fine.'
+      : (nonEn
+        ? `A spoken-out version of the line for text-to-speech in ${lang}: spell out any symbols or abbreviations so they read aloud correctly.`
+        : `A spoken-out version of the line for text-to-speech: plain natural English, spelling out any symbols or abbreviations so they read aloud correctly. '!' and '?' are fine to keep.`);
+
+    const jsonSpec = `Output ONLY the following JSON structure (no preamble, no explanation, no code fences):
+{
+  "nextSpeaker": one of ${JSON.stringify(agentIds)} (the ID of the spirit who speaks next),
+  "reply": "What they say. An emotionally expressive, short line ${replyLangNote} (1-2 sentences, max ~80 chars)",
+  "ttsReply": "${ttsNote}",
+  "isEnd": true or false (true only if this is the closing punchline that ends the conversation, otherwise false)
+}`;
+
+    // 出力言語の指定(English以外)
+    const langInstruction = nonEn
+      ? `\n\nIMPORTANT: Write "reply" and "ttsReply" entirely in ${lang} (use that language's native script), staying in each spirit's character.`
+      : '';
+
+    // タップで話者が指定された場合は、その精霊に必ずしゃべらせる
+    const forceInstruction = forcedIdx >= 0
+      ? `\n\nIMPORTANT: The next speaker MUST be ${forceSpeaker} (${spirits[forcedIdx].name}). Set "nextSpeaker" to "${forceSpeaker}" and write the line in that spirit's voice. Do NOT end the conversation here ("isEnd" must be false).`
+      : '';
+
+    const text = await callOpenRouter({
+      temperature: 1.0,
+      messages: [
+        { role: 'user', content: systemPrompt + '\n\n' + conversation + langInstruction + forceInstruction + '\n\n' + jsonSpec }
+      ]
     });
 
-    const data = parseJSONSafe(response.text);
+    const data = parseJSONSafe(text);
+    // 指定話者が確実に反映されるようサーバー側でも上書き
+    if (forcedIdx >= 0) {
+      data.nextSpeaker = forceSpeaker;
+      data.isEnd = false;
+    }
     console.log('Banter:', JSON.stringify(data));
     res.json(data);
   } catch (error) {
@@ -349,7 +631,7 @@ app.all('/api/tts', async (req, res) => {
 if (require.main === module) {
   app.listen(port, () => {
     console.log(`AR Agents 2 prototype running at http://localhost:${port}`);
-    console.log(`Mode: ${hasApiKey ? 'Gemini API' : 'DEMO (no API key)'}`);
+    console.log(`Mode: ${hasApiKey ? `OpenRouter (${OPENROUTER_MODEL})` : 'DEMO (no API key)'}`);
   });
 }
 
