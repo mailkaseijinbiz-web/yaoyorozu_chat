@@ -2139,21 +2139,24 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     requestAnimationFrame(tick);
   } else {
-    setInterval(() => {
-      if (!debugEl) return;
-      const lines = [
-        `mode:    ${mode} / ui: ${uiMode}`,
-        `spirits: ${spirits.length}  visible: ${visibleTargets.size}  arRdy: ${arReadyFired ? '✓' : '—'}`,
-        `scan:    ${isScanning ? '▶' : '—'}(${scanMode})  compile: ${isCompiling ? '⏳' : '—'}  req: ${isRequestPending ? '⏳' : '—'}`,
-        `net:     ${netInFlight > 0 ? '⏳ ' + netInFlight + (lastNetUrl ? '  ' + lastNetUrl : '') : '—'}`,
-        `imgRecog: ${scanReqStart != null ? Math.round(performance.now() - scanReqStart) + 'ms…' : (lastScanMs != null ? lastScanMs + 'ms' : '—')}`,
-        `banter:  ${isBanterRunning ? '▶' : '—'} ${banterReqStart != null ? Math.round(performance.now() - banterReqStart) + 'ms…' : (lastBanterMs != null ? lastBanterMs + 'ms' : '—')}  turns: ${banterTurns}  audio: ${audioUnlocked ? '✓' : '✗'}`,
-        `detect:  ${detectedTargets.length ? detectedTargets.map(t => t.target.name).join(', ') : '—'}`,
-        `gaze:    ${gazeStartTime ? Math.round((Date.now() - gazeStartTime) / 100) / 10 + 's' : '—'}`,
-        `err:     ${lastBanterErr}`,
-      ];
-      debugEl.textContent = lines.join('\n');
-    }, 200);
+    // デスクトップもモバイルと同じ1行・ms・Helvetica・右揃え表示
+    debugEl.classList.add('big');
+    const row = document.createElement('div'); row.className = 'dbg-row';
+    const labelEl = document.createElement('span'); labelEl.className = 'dbg-label';
+    const valEl = document.createElement('span'); valEl.className = 'dbg-val';
+    row.appendChild(labelEl); row.appendChild(valEl); debugEl.appendChild(row);
+    const tick = () => {
+      let label, ms;
+      if (scanReqStart != null) { label = 'Image Recognition:'; ms = performance.now() - scanReqStart; }
+      else if (banterReqStart != null) { label = 'Banter:'; ms = performance.now() - banterReqStart; }
+      else if (lastBanterAt >= lastScanAt && lastBanterMs != null) { label = 'Banter:'; ms = lastBanterMs; }
+      else if (lastScanMs != null) { label = 'Image Recognition:'; ms = lastScanMs; }
+      else { label = 'Image Recognition:'; ms = null; }
+      labelEl.textContent = label;
+      valEl.textContent = ms != null ? Math.round(ms) + ' ms' : '—';
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   (async () => {
