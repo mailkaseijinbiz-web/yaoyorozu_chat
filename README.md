@@ -19,13 +19,13 @@
 
 ```bash
 npm install
-cp .env.example .env   # GEMINI_API_KEY を設定
+cp .env.example .env   # OPENROUTER_API_KEY を設定
 npm start
 ```
 
 http://localhost:3000 を開く。
 
-- `GEMINI_API_KEY` 未設定の場合は**デモモード**（固定の精霊名・固定セリフ）で動作する
+- `OPENROUTER_API_KEY` 未設定の場合は**デモモード**（固定の精霊名・固定セリフ）で動作する。モデルは `OPENROUTER_MODEL`（既定 `google/gemma-3-27b-it`）で切替可能
 - `ELEVENLABS_API_KEY` 未設定の場合は音声なし（テキストのみ）で会話が進む
 - スマホで試す場合はカメラAPIの制約上 **HTTPS が必須**。`npx cloudflared tunnel --url http://localhost:3000` や ngrok などでトンネルを張る
 
@@ -33,7 +33,7 @@ http://localhost:3000 を開く。
 
 | ファイル | 役割 |
 |---|---|
-| `server.js` | Express + Gemini API（物体検出/動的精霊名 `/api/segment-vessels`、会話生成 `/api/banter`、ElevenLabs音声 `/api/tts`） |
+| `server.js` | Express + OpenRouter（Gemma 3 27b: 物体検出/動的精霊名 `/api/segment-vessels`、会話生成 `/api/banter`、ElevenLabs音声 `/api/tts`） |
 | `public/app.js` | スキャン→凝視ゲージ→自動注入→MindARランタイムコンパイル→ARシーン→Banterループ |
 | `public/index.html` | A-Frame 1.5.0 + MindAR 1.2.5 (CDN) |
 | `api/index.js` + `vercel.json` | Vercelサーバーレス対応（`/api/*`をExpressに委譲、静的ファイルは`public/`から配信） |

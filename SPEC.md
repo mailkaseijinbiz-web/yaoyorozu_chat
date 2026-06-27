@@ -131,7 +131,10 @@ ar_agents_2/
 
 | 変数 | 説明 |
 |---|---|
-| `GEMINI_API_KEY` | Google Gemini APIキー |
+| `OPENROUTER_API_KEY` | OpenRouter APIキー |
+| `OPENROUTER_MODEL` | 使用モデル (デフォルト: `google/gemma-3-27b-it`) |
+| `OPENROUTER_PROVIDER` | 推論プロバイダの優先順位 (カンマ区切り、デフォルト: `Cerebras`)。指定モデルを提供しないプロバイダは自動フォールバック |
+| `OPENROUTER_ALLOW_FALLBACKS` | `false` で他プロバイダへのフォールバックを禁止 (デフォルト: 許可) |
 | `ELEVENLABS_API_KEY` | ElevenLabs APIキー |
 | `PORT` | ローカルサーバーポート (デフォルト: 3000) |
 

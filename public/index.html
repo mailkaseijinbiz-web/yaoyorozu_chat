@@ -1,15 +1,18 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <meta charset="utf-8" />
-    <title>AR Agents 2 - 精霊召喚プロトタイプ</title>
+    <title>AR Agents 2 - Spirit Summoning Prototype</title>
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#0b0f19" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="AR Agents 2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -35,22 +38,24 @@
         <div id="scan-line"></div>
       </div>
 
-      <div id="guide-text">精霊を凝視して召喚せよ...</div>
+      <div id="guide-text">Gaze at an object to summon its spirit...</div>
 
       <div id="scan-status"></div>
 
       <div id="toast" class="hidden"></div>
 
       <button id="spirit-count-btn" class="hidden">
-        <span id="spirit-count-num">0</span>体の精霊
+        <span id="spirit-count-num">0</span> spirits
       </button>
 
-      <div id="mode-toggle" class="hidden">
-        <button id="mode-scan-btn" class="mode-btn active">スキャン</button>
-        <button id="mode-banter-btn" class="mode-btn">会話</button>
+      <div id="mode-toggle">
+        <button id="mode-scan-btn" class="mode-btn active">Scan</button>
+        <button id="mode-banter-btn" class="mode-btn">Talk</button>
       </div>
 
-      <button id="reset-btn" class="hidden">リセット</button>
+      <button id="reset-btn" class="hidden">Reset</button>
+
+      <button id="settings-btn" aria-label="Settings">⚙</button>
     </div>
 
     <!-- 注入フラッシュ -->
@@ -59,7 +64,7 @@
     <!-- コンパイル中オーバーレイ -->
     <div id="loading-overlay" class="hidden">
       <div class="spinner"></div>
-      <div id="loading-text">魂を抽出中...</div>
+      <div id="loading-text">Extracting soul...</div>
     </div>
 
     <!-- 精霊一覧パネル -->
@@ -68,10 +73,47 @@
       <div id="spirit-panel-sheet">
         <div class="spirit-panel-handle"></div>
         <div class="spirit-panel-title">
-          召喚した精霊 <span id="spirit-panel-count">0</span>体
+          Summoned spirits: <span id="spirit-panel-count">0</span>
           <button id="spirit-panel-close">✕</button>
         </div>
+        <button id="panel-chat-btn">Start conversation</button>
+        <div id="panel-chat" class="hidden"></div>
         <div id="spirit-list"></div>
+      </div>
+    </div>
+
+    <!-- 設定パネル -->
+    <div id="settings-panel">
+      <div id="settings-backdrop"></div>
+      <div id="settings-sheet">
+        <div class="spirit-panel-handle"></div>
+        <div class="spirit-panel-title">
+          Settings
+          <button id="settings-close">✕</button>
+        </div>
+        <div class="settings-row">
+          <div class="settings-label">Language</div>
+          <select id="lang-select" class="settings-select"></select>
+        </div>
+        <div class="settings-hint">Spirits' names and speech are generated in this language.</div>
+
+        <div class="settings-row">
+          <div class="settings-label">Voice (TTS)</div>
+          <div class="settings-seg">
+            <button id="tts-elevenlabs" class="seg-btn active">ElevenLabs</button>
+            <button id="tts-standalone" class="seg-btn">On-device</button>
+          </div>
+        </div>
+        <div class="settings-hint" id="tts-hint">High-quality cloud voices (needs ElevenLabs API key).</div>
+
+        <div class="settings-row">
+          <div class="settings-label">Scan</div>
+          <div class="settings-seg">
+            <button id="scan-auto" class="seg-btn">Auto</button>
+            <button id="scan-manual" class="seg-btn active">Manual</button>
+          </div>
+        </div>
+        <div class="settings-hint" id="scan-hint">Tap the screen to scan one object at a time.</div>
       </div>
     </div>
 
