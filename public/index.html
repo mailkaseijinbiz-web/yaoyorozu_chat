@@ -1,15 +1,18 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <meta charset="utf-8" />
-    <title>AR Agents 2 - 精霊召喚プロトタイプ</title>
+    <title>AR Agents 2 - Spirit Summoning Prototype</title>
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" content="#0b0f19" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="AR Agents 2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -35,22 +38,22 @@
         <div id="scan-line"></div>
       </div>
 
-      <div id="guide-text">精霊を凝視して召喚せよ...</div>
+      <div id="guide-text">Gaze at an object to summon its spirit...</div>
 
       <div id="scan-status"></div>
 
       <div id="toast" class="hidden"></div>
 
       <button id="spirit-count-btn" class="hidden">
-        <span id="spirit-count-num">0</span>体の精霊
+        <span id="spirit-count-num">0</span> spirits
       </button>
 
-      <div id="mode-toggle" class="hidden">
-        <button id="mode-scan-btn" class="mode-btn active">スキャン</button>
-        <button id="mode-banter-btn" class="mode-btn">会話</button>
+      <div id="mode-toggle">
+        <button id="mode-scan-btn" class="mode-btn active">Scan</button>
+        <button id="mode-banter-btn" class="mode-btn">Talk</button>
       </div>
 
-      <button id="reset-btn" class="hidden">リセット</button>
+      <button id="reset-btn" class="hidden">Reset</button>
     </div>
 
     <!-- 注入フラッシュ -->
@@ -59,7 +62,7 @@
     <!-- コンパイル中オーバーレイ -->
     <div id="loading-overlay" class="hidden">
       <div class="spinner"></div>
-      <div id="loading-text">魂を抽出中...</div>
+      <div id="loading-text">Extracting soul...</div>
     </div>
 
     <!-- 精霊一覧パネル -->
@@ -68,7 +71,7 @@
       <div id="spirit-panel-sheet">
         <div class="spirit-panel-handle"></div>
         <div class="spirit-panel-title">
-          召喚した精霊 <span id="spirit-panel-count">0</span>体
+          Summoned spirits: <span id="spirit-panel-count">0</span>
           <button id="spirit-panel-close">✕</button>
         </div>
         <div id="spirit-list"></div>

@@ -65,11 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== 状態 =====
   let currentSituation = null;
   const SITUATIONS = [
-    { location: 'リビングルーム', weather: '窓の外はどしゃ降りの雨' },
-    { location: '静かな公園のベンチ', weather: '木漏れ日が心地よい晴天' },
-    { location: 'お洒落なカフェのテラス席', weather: '少し風が強い曇り空' },
-    { location: 'ごちゃごちゃした作業机の上', weather: '夕暮れ時の淡い西日' },
-    { location: '真夜中の書斎', weather: '冷たい風が吹く星空' }
+    { location: 'a living room', weather: 'pouring rain outside the window' },
+    { location: 'a bench in a quiet park', weather: 'pleasant sunshine filtering through the trees' },
+    { location: 'the terrace of a stylish cafe', weather: 'a cloudy sky with a bit of a breeze' },
+    { location: 'a cluttered work desk', weather: 'the soft glow of the setting sun at dusk' },
+    { location: 'a study at midnight', weather: 'a starry sky with a cold wind blowing' }
   ];
   let mode = 'scan';    // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
   let uiMode = 'scan'; // 'scan' (スキャンUI表示) | 'banter' (会話鑑賞)
@@ -97,7 +97,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let prevMotionFrame = null;
 
   let compiledMindUrl = null;
-  const visibleTargets = new Set();
+  const visibleTargets = new Set();          // 実際にMindARでトラッキング中の精霊index
+  // 会話判定用の「猶予付き」可視集合。トラッキングが一瞬切れても少しの間は映っている扱いにし、
+  // ARの追跡ブレで会話が止まったり、なかなか始まらなくなるのを防ぐ。
+  const banterVisible = new Set();
+  const visibleGraceTimers = {};
+  const VISIBLE_GRACE_MS = 2200;
+  function clearBanterVisibility() {
+    banterVisible.clear();
+    Object.keys(visibleGraceTimers).forEach(k => {
+      if (visibleGraceTimers[k]) clearTimeout(visibleGraceTimers[k]);
+      delete visibleGraceTimers[k];
+    });
+  }
 
   // ==========================================
   // 精霊の永続化 (LocalStorage)
@@ -154,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="spirit-name">${spirit.name}</div>
           <div class="spirit-vessel">${spirit.vessel}</div>
         </div>
-        <button class="spirit-delete-btn" data-idx="${idx}">解放</button>
+        <button class="spirit-delete-btn" data-idx="${idx}">Release</button>
       `;
       list.appendChild(row);
     });
@@ -180,11 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
       mode = 'scan';
       activeVideo = videoElement;
       videoElement.classList.remove('hidden-feed');
-      modeToggle.classList.add('hidden');
       setUIMode('scan');
       const ok = await startCamera();
       if (ok) startScanning();
-      showToast('精霊が1体に。もう1体見つけてください');
+      showToast('Down to one spirit. Find one more.');
       return;
     }
 
@@ -217,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast('カメラAPIが利用できません。HTTPSでアクセスしてください', true);
+      showToast('Camera API unavailable. Please access over HTTPS.', true);
       return false;
     }
     try {
@@ -228,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (err) {
       console.error('Camera error:', err);
-      showToast('カメラへのアクセスを許可してください', true);
+      showToast('Please allow camera access.', true);
       return false;
     }
   }
@@ -390,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 精霊名の重複を避ける。同名(例:コップ2個→両方「器の精霊」)だと
   // banter履歴の名前ベースのフィルタでセリフが混ざるため、②③…を付けて一意にする。
   function uniqueSpiritName(base) {
-    const name = base || `精霊${spirits.length}`;
+    const name = base || `Spirit ${spirits.length}`;
     if (!spirits.some(s => s.name === name)) return name;
     const SUP = ['②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
     for (let n = 2; n <= 20; n++) {
@@ -433,9 +444,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateGuideUI() {
     const color = '#00e5ff';
     if (mode === 'scan') {
-      guideText.textContent = '精霊を凝視して召喚せよ...';
+      guideText.textContent = 'Gaze at an object to summon its spirit...';
     } else {
-      guideText.textContent = '新しいモノを写すと精霊が増えます';
+      guideText.textContent = 'Point at new objects to add more spirits';
     }
     scanStatus.textContent = '';
     guideText.style.borderColor = color;
@@ -446,9 +457,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateScanGuideVisibility();
   }
 
-  // スキャンラインは初期スキャン中のみ表示 (凝視中は矩形の塗り潰しが進行表示になる)
+  // スキャンライン: スキャンUI表示中かつスキャン稼働中は常に表示 (凝視中は矩形の塗り潰しが進行表示になる)
+  // mode('scan'/'ar')ではなくuiModeで判定し、AR中にScanタブで追加召喚する間も出るようにする。
   function updateScanLine() {
-    const show = mode === 'scan' && isScanning && gazeStartTime === null;
+    const show = uiMode === 'scan' && isScanning && gazeStartTime === null;
     scanLine.classList.toggle('hidden', !show);
   }
 
@@ -572,12 +584,19 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
+        // スキャンは同時に1つまで: 候補が複数あっても、最も大きく写っている対象だけを残す
+        if (newTargets.length > 1) {
+          const boxArea = (b) => Math.max(0, (b[2] - b[0])) * Math.max(0, (b[3] - b[1]));
+          newTargets.sort((a, b) => boxArea(b.target.box) - boxArea(a.target.box));
+          newTargets.length = 1;
+        }
+
         if (newTargets.length === 0) {
           // 検出されたモノはすべて登録済み
           detectedTargets = [];
           clearOverlay();
           if (mode === 'scan') {
-            scanStatus.textContent = `「${registeredNames[0]}」は登録済み — 別のモノを写してください`;
+            scanStatus.textContent = `"${registeredNames[0]}" already registered — point at a different object`;
           } else {
             updateGuideUI();
           }
@@ -609,10 +628,10 @@ document.addEventListener('DOMContentLoaded', () => {
           // ステータステキスト
           if (newTargets.length === 1) {
             scanStatus.textContent = `${newTargets[0].target.name} — ${newTargets[0].target.spiritName}`;
-            if (mode === 'ar') guideText.textContent = `「${newTargets[0].target.spiritName}」を凝視で召喚`;
+            if (mode === 'ar') guideText.textContent = `Gaze to summon "${newTargets[0].target.spiritName}"`;
           } else {
-            const names = newTargets.map(t => t.target.spiritName).join('・');
-            scanStatus.textContent = `${names} — ${newTargets.length}体同時召喚！`;
+            const names = newTargets.map(t => t.target.spiritName).join(', ');
+            scanStatus.textContent = `${names} — summon ${newTargets.length} at once!`;
           }
 
           startGaze();
@@ -778,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resetGaze();
         detectedTargets = [];
         clearOverlay();
-        scanStatus.textContent = '視線が逸れました — ゲージをリセット';
+        scanStatus.textContent = 'Gaze broke — gauge reset';
         if (mode === 'ar') updateGuideUI();
       }
     }
@@ -819,9 +838,9 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const { target, sig, color } of validTargets) {
         spirits.push({
           image: cropImageWithBox(fullImg, target.box),
-          vessel: target.name || '不思議な器',
+          vessel: target.name || 'a mysterious vessel',
           name: uniqueSpiritName(target.spiritName),
-          personality: target.personality || '陽気でおしゃべり好き',
+          personality: target.personality || 'cheerful and talkative',
           voice: target.voice || 'cool_male',
           color: color || nextColor(),
           sig
@@ -830,8 +849,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       showToast(newNames.length === 1
-        ? `✨ ${newNames[0]}が宿った！`
-        : `✨ ${newNames.join('・')}が宿った！`);
+        ? `✨ ${newNames[0]} has taken form!`
+        : `✨ ${newNames.join(', ')} have taken form!`);
       saveSpirits();
       updateSpiritCountBtn();
       resetBtn.classList.remove('hidden');
@@ -845,7 +864,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (err) {
       console.error('Infusion error:', err);
-      showToast('画像の処理に失敗しました。もう一度どうぞ');
+      showToast('Failed to process the image. Please try again.');
       startScanning();
     }
   }
@@ -911,6 +930,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     arSceneContainer.innerHTML = '';
     visibleTargets.clear();
+    clearBanterVisibility();
     arVideo = null;
 
     // 旧WebGLコンテキストに紐づいたテクスチャキャッシュを破棄する。
@@ -933,12 +953,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!recompile) {
       loadingOverlay.classList.remove('hidden');
-      loadingText.textContent = 'MindARコンパイル準備中...';
+      loadingText.textContent = 'Preparing MindAR compile...';
       stopCamera();
       videoElement.classList.add('hidden-feed');
       teardownScene();
     } else {
-      showToast(newcomerName ? `✨ ${newcomerName}を召喚中...` : 'ARシーンを更新中...');
+      showToast(newcomerName ? `✨ Summoning ${newcomerName}...` : 'Updating AR scene...');
     }
 
     try {
@@ -946,7 +966,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const compiler = new window.MINDAR.IMAGE.Compiler();
       await compiler.compileImageTargets(imgs, (p) => {
         // recompile中はオーバーレイ非表示なのでloadingTextへの書き込みは無害
-        loadingText.textContent = `魂を抽出中... ${Math.round(p * 100)}%`;
+        // MindARの進捗pは0〜100(%)で渡ってくるのでそのまま使う(以前は*100で10000%になっていた)
+        loadingText.textContent = `Extracting soul... ${Math.min(100, Math.round(p))}%`;
       });
       const buffer = await compiler.exportData();
       if (compiledMindUrl) URL.revokeObjectURL(compiledMindUrl);
@@ -955,7 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // recompile: コンパイル完了後にシーン差し替え (ここだけ瞬時に暗転)
       if (recompile) {
         loadingOverlay.classList.remove('hidden');
-        loadingText.textContent = 'ARシーンを更新中...';
+        loadingText.textContent = 'Updating AR scene...';
         teardownScene();
       }
 
@@ -991,12 +1012,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // 直前まで動いていた構成(>=2体)が残っていれば、その構成でARを一度だけ作り直して会話を復帰。
       if (poppedNewcomer && !isRetry && spirits.length >= 2) {
-        showToast('追加召喚に失敗。前の会話に戻します…');
+        showToast('Failed to add spirit. Returning to the previous conversation...');
         return enterAR(null, true);
       }
 
       // 復旧できない場合はスキャンモードへ安全に戻す。失敗時はモードに関わらずカメラを必ず生かす。
-      showToast('ARコンパイルに失敗しました。再スキャンします…');
+      showToast('AR compile failed. Re-scanning...');
       teardownScene();
       mode = 'scan';
       activeVideo = videoElement;
@@ -1005,14 +1026,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (recovered) {
         startScanning();
       } else {
-        showToast('カメラの再起動に失敗しました。ページを再読み込みしてください', true);
+        showToast('Failed to restart the camera. Please reload the page.', true);
       }
     }
   }
 
   function buildScene() {
     const maxTrack = Math.min(spirits.length, 5);
-    // リングは「今しゃべっている1体」だけに表示してマーカーが複数並ばないようにする
+    // リング(目印)は映っている精霊すべてに表示し続ける(targetFound/targetLostで制御)
     const targetsHTML = spirits.map((s, i) => `
       <a-entity mindar-image-target="targetIndex: ${i}" id="target-entity-${i}">
         <a-ring id="ring-${i}" color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
@@ -1037,9 +1058,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!el) return;
       el.addEventListener('targetFound', () => {
         visibleTargets.add(i);
-        scanStatus.textContent = `${spirit.name}がここにいます`;
+        banterVisible.add(i);
+        if (visibleGraceTimers[i]) { clearTimeout(visibleGraceTimers[i]); visibleGraceTimers[i] = null; }
+        scanStatus.textContent = `${spirit.name} is here`;
+        // スキャン済みの目印(リング)は、映っている間ずっと表示し続ける
+        const ring = document.getElementById(`ring-${i}`);
+        if (ring) ring.setAttribute('visible', 'true');
         updateScanGuideVisibility();
-        // 2体以上映ったら会話タブへ自動切替＆バンター開始
+        // 2体が実際に映ったら会話タブへ自動切替＆バンター開始
         if (mode === 'ar' && visibleTargets.size >= 2) {
           if (uiMode !== 'banter') setUIMode('banter');
           if (!isBanterRunning) startBanter(null);
@@ -1049,12 +1075,20 @@ document.addEventListener('DOMContentLoaded', () => {
         visibleTargets.delete(i);
         // 画面外に出たら吹き出し・マーカーを消す
         hideSpeechBubble(i);
+        const ring = document.getElementById(`ring-${i}`);
+        if (ring) ring.setAttribute('visible', 'false');
         if (visibleTargets.size === 0) scanStatus.textContent = '';
         updateScanGuideVisibility();
-        // 1体以下になったらスキャンタブへ自動切替
-        if (mode === 'ar' && visibleTargets.size < 2 && uiMode === 'banter') {
-          setUIMode('scan');
-        }
+        // 猶予付き: すぐには会話可視集合から外さない。一定時間で戻ってこなければ確定で外す。
+        if (visibleGraceTimers[i]) clearTimeout(visibleGraceTimers[i]);
+        visibleGraceTimers[i] = setTimeout(() => {
+          visibleGraceTimers[i] = null;
+          banterVisible.delete(i);
+          // 確定で2体未満になったらスキャンタブへ自動で戻す
+          if (mode === 'ar' && banterVisible.size < 2 && uiMode === 'banter') {
+            setUIMode('scan');
+          }
+        }, VISIBLE_GRACE_MS);
       });
     });
   }
@@ -1122,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       audioUnlocked = false;
-      showToast('🔊 画面をタップすると精霊の声が出ます', true);
+      showToast('🔊 Tap the screen to hear the spirits speak', true);
       finish(false);
     });
   }
@@ -1146,7 +1180,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let pendingTurn = null;
   let newcomerToAnnounce = null;
 
-  // 現在トラッキング中（画面に映っている）精霊のグローバルindex一覧
+  // 会話参加できる精霊のグローバルindex一覧。
+  // 吹き出しは実際にトラッキング中の物体にしか描画できないため、ここは「実可視(visibleTargets)」を使う。
+  // (猶予付きbanterVisibleはタブの自動切替を安定させる用途のみ。会話の話者は必ず実際に映っている精霊にする)
   function visibleSpiritIndices() {
     return [...visibleTargets].filter(i => i >= 0 && i < spirits.length).sort((a, b) => a - b);
   }
@@ -1227,11 +1263,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // ヒント表示: 精霊を探しているときにユーザーを誘導する
       if (mode === 'ar' && uiMode === 'banter') {
         if (visible.length === 0) {
-          scanStatus.textContent = `精霊たちをカメラに向けてください`;
+          scanStatus.textContent = `Point your camera at the spirits`;
         } else {
           const missingIdx = spirits.findIndex((_, i) => !visibleTargets.has(i));
-          const missingName = missingIdx >= 0 ? spirits[missingIdx].name : '精霊';
-          scanStatus.textContent = `${missingName}をカメラに向けてください`;
+          const missingName = missingIdx >= 0 ? spirits[missingIdx].name : 'a spirit';
+          scanStatus.textContent = `Point your camera at ${missingName}`;
         }
       }
       banterTimeout = setTimeout(() => runBanterTurn(session), 700);
@@ -1300,10 +1336,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ===== 3D吹き出し (CanvasTexture直接適用) =====
+  // ===== 3D吹き出し (CanvasTexture直接適用 / アメリカンコミック風) =====
   const bubbleCanvases = [];
   const bubbleTextures = [];
   const bubbleHideTimers = []; // hide→show競合で吹き出しが表示直後に消えるのを防ぐ
+  const bubbleTypeTimers = []; // タイプライター表示用のインターバル
+  // 主役はBangers。読込失敗時もコミック感を保つようOS搭載の手描き系へフォールバック
+  // ('Chalkboard SE'/'Marker Felt'=iOS, 'Comic Sans MS'=Win/Mac)
+  const COMIC_FONT = "'Bangers', 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', Impact, sans-serif";
+  const TYPE_INTERVAL = 38;    // 1文字あたりの表示間隔(ms)
+  // コミックフォントを事前ロードしておく(canvas描画時にフォールバックさせない)
+  if (document.fonts && document.fonts.load) document.fonts.load('42px "Bangers"');
 
   function getBubbleCanvas(i) {
     if (!bubbleCanvases[i]) {
@@ -1315,57 +1358,101 @@ document.addEventListener('DOMContentLoaded', () => {
     return bubbleCanvases[i];
   }
 
-  function showSpeechBubble(id, text) {
-    const plane = document.getElementById(`bubble-plane-${id}`);
-    if (!plane) return;
+  // 吹き出しの寸法 (canvas 512x256)
+  const BB = { rx: 15, ry: 15, rw: 482, rh: 180, radius: 26 };
 
-    // 直前のhideが予約した「消す」タイマーを取り消す(表示直後に消されるのを防ぐ)
-    if (bubbleHideTimers[id]) {
-      clearTimeout(bubbleHideTimers[id]);
-      bubbleHideTimers[id] = null;
-    }
-
-    const canvas = getBubbleCanvas(id);
-    const ctx = canvas.getContext('2d');
-    const themeColor = spirits[id].color;
-
-    ctx.clearRect(0, 0, 512, 256);
-
-    ctx.fillStyle = 'rgba(11, 15, 25, 0.93)';
-    ctx.strokeStyle = themeColor;
-    ctx.lineWidth = 6;
-    const rx = 15, ry = 15, rw = 482, rh = 180, radius = 16;
+  // アメリカンコミック風バルーン: 白地・極太の黒インク輪郭・面取り多角形＋V字の尻尾
+  // (毎フレーム再描画されるので形状は固定。色の識別は物体側のリングが担当する)
+  function drawComicBalloon(ctx, themeColor) {
+    const { rx, ry, rw, rh } = BB;
+    const ch = 36;          // 面取り(コーナーの斜めカット)量
+    const cx = 256;         // 尻尾の中心X
     ctx.beginPath();
-    ctx.moveTo(rx + radius, ry);
-    ctx.lineTo(rx + rw - radius, ry);
-    ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + radius);
-    ctx.lineTo(rx + rw, ry + rh - radius);
-    ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - radius, ry + rh);
-    ctx.lineTo(256 + 18, ry + rh);
-    ctx.lineTo(256, ry + rh + 22);
-    ctx.lineTo(256 - 18, ry + rh);
-    ctx.lineTo(rx + radius, ry + rh);
-    ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - radius);
-    ctx.lineTo(rx, ry + radius);
-    ctx.quadraticCurveTo(rx, ry, rx + radius, ry);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    ctx.moveTo(rx + ch, ry);                 // 上辺(左から)
+    ctx.lineTo(rx + rw - ch, ry);            // 上辺(右へ)
+    ctx.lineTo(rx + rw, ry + ch);            // 右上の面取り
+    ctx.lineTo(rx + rw, ry + rh - ch);       // 右辺
+    ctx.lineTo(rx + rw - ch, ry + rh);       // 右下の面取り
+    ctx.lineTo(cx + 24, ry + rh);            // 下辺(尻尾の右付け根)
+    ctx.lineTo(cx + 3, ry + rh + 32);        // 尻尾の先端(少し右寄りで動きを出す)
+    ctx.lineTo(cx - 18, ry + rh);            // 下辺(尻尾の左付け根 = V字)
+    ctx.lineTo(rx + ch, ry + rh);            // 下辺(左へ)
+    ctx.lineTo(rx, ry + rh - ch);            // 左下の面取り
+    ctx.lineTo(rx, ry + ch);                 // 左辺
+    ctx.closePath();                         // 左上の面取りで先頭へ
 
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    // 白で塗りつぶし → 黒の極太インク輪郭
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px Helvetica Neue, Arial, sans-serif';
+    ctx.fill();
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+  }
+
+  // コミックフォントで折り返し、枠に収まる行レイアウトを計算
+  function computeBubbleLayout(id, text) {
+    const ctx = getBubbleCanvas(id).getContext('2d');
+    const maxTextW = BB.rw - 56;
+    // テキストは絶対に省略しない(「…」で切らない)。入りきらなければフォントを小さくして全文を収める。
+    const maxLines = 7;
+    const wrap = (fontPx) => {
+      ctx.font = `${fontPx}px ${COMIC_FONT}`;
+      const words = text.split(/(\s+)/);   // 空白も保持
+      const lines = [];
+      let cur = '';
+      const pushWord = (w) => {
+        const test = cur + w;
+        if (ctx.measureText(test.trim()).width <= maxTextW || cur === '') cur = test;
+        else { lines.push(cur.trim()); cur = w.trim() ? w : ''; }
+      };
+      for (const w of words) {
+        if (ctx.measureText(w.trim()).width > maxTextW) { for (const ch of w) pushWord(ch); }
+        else pushWord(w);
+      }
+      if (cur.trim()) lines.push(cur.trim());
+      return lines;
+    };
+    // 上下パディングを引いた、テキストを収められる本体内の高さ
+    const maxBlockH = BB.rh - 44;
+    // 横幅(行数)と縦(総行高)の両方が枠内に収まるまでフォントを段階的に縮める。
+    // 全文を必ず収めるため、切り捨て(slice)はせず最小12pxまで縮小する。
+    let fontPx = 46, lines = wrap(fontPx);
+    while (fontPx > 12 && (lines.length > maxLines || lines.length * (fontPx + 4) > maxBlockH)) {
+      fontPx -= 2;
+      lines = wrap(fontPx);
+    }
+    const lineH = fontPx + 4;
+    const startY = BB.ry + BB.rh / 2 - (lines.length - 1) * (lineH / 2);
+    return { lines, fontPx, lineH, startY };
+  }
+
+  // バルーン + (revealed文字までの)テキストを1フレーム描画する
+  function drawBubbleFrame(id, layout, revealed) {
+    const ctx = getBubbleCanvas(id).getContext('2d');
+    ctx.clearRect(0, 0, 512, 256);
+    drawComicBalloon(ctx, spirits[id].color);
+
+    ctx.fillStyle = '#141414';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const charsPerLine = 15;
-    const lines = [];
-    for (let i = 0; i < text.length; i += charsPerLine) {
-      lines.push(text.slice(i, i + charsPerLine));
-    }
-    const startY = ry + rh / 2 - (lines.length - 1) * 17;
-    lines.forEach((line, i) => ctx.fillText(line, 256, startY + i * 34));
+    ctx.font = `${layout.fontPx}px ${COMIC_FONT}`;
+    let before = 0;
+    layout.lines.forEach((line, i) => {
+      const take = Math.max(0, Math.min(line.length, revealed - before));
+      before += line.length;
+      const shown = line.slice(0, take);
+      if (shown) ctx.fillText(shown, 256, layout.startY + i * layout.lineH);
+    });
+  }
 
-    // CanvasTextureを直接マテリアルに適用 (A-Frameのsrc属性経由はiOSで真っ黒になる)
-    const applyTex = (m) => {
+  // CanvasTextureを生成しメッシュへ適用 (A-Frameのsrc属性経由はiOSで真っ黒になる)
+  function applyBubbleTexture(id) {
+    const plane = document.getElementById(`bubble-plane-${id}`);
+    if (!plane) return;
+    const canvas = getBubbleCanvas(id);
+    const apply = (m) => {
       if (!bubbleTextures[id]) {
         const tex = new THREE.CanvasTexture(canvas);
         if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
@@ -1377,36 +1464,69 @@ document.addEventListener('DOMContentLoaded', () => {
       m.material.needsUpdate = true;
     };
     const mesh = plane.getObject3D('mesh');
-    if (mesh) {
-      applyTex(mesh);
-    } else {
-      // arReady後でもエンティティ初期化が1フレーム遅れる場合があるため再試行
-      requestAnimationFrame(() => {
-        const m = plane.getObject3D('mesh');
-        if (m) applyTex(m);
-      });
-    }
+    if (mesh) apply(mesh);
+    // arReady後でもエンティティ初期化が1フレーム遅れる場合があるため再試行
+    else requestAnimationFrame(() => { const m = plane.getObject3D('mesh'); if (m) apply(m); });
+  }
+
+  function showSpeechBubble(id, text) {
+    const plane = document.getElementById(`bubble-plane-${id}`);
+    if (!plane) return;
+
+    // 直前のhideが予約した「消す」タイマー、および進行中のタイプライターを取り消す
+    if (bubbleHideTimers[id]) { clearTimeout(bubbleHideTimers[id]); bubbleHideTimers[id] = null; }
+    if (bubbleTypeTimers[id]) { clearInterval(bubbleTypeTimers[id]); bubbleTypeTimers[id] = null; }
+
+    const layout = computeBubbleLayout(id, text);
+    const total = layout.lines.reduce((sum, l) => sum + l.length, 0);
+
+    // まず空のバルーンを描いて表示(ポップ)してから1文字ずつ出す
+    drawBubbleFrame(id, layout, 0);
+    applyBubbleTexture(id);
 
     plane.setAttribute('visible', 'true');
+    // 出現: 弾性(ゴムのような跳ね)で勢いよくポップ
     plane.setAttribute('animation', {
       property: 'scale',
       from: '0 0 0',
       to: '1 1 1',
-      dur: 300,
-      easing: 'easeOutBack'
+      dur: 700,
+      easing: 'easeOutElastic'
+    });
+    // 待機中: ふわふわ上下に揺れていきいきと(位置を弱くピンポン)
+    plane.setAttribute('animation__bob', {
+      property: 'object3D.position.y',
+      from: 0.85,
+      to: 0.95,
+      dur: 1500,
+      dir: 'alternate',
+      loop: true,
+      easing: 'easeInOutSine',
+      delay: 320
     });
 
-    // マーカー(リング)は話している1体だけに表示する
-    const ring = document.getElementById(`ring-${id}`);
-    if (ring) ring.setAttribute('visible', 'true');
+    // リング(目印)はtargetFound/targetLostで制御。会話中も映っている全精霊に印を残す。
+
+    // タイプライター: 1文字ずつ描画してテクスチャを更新
+    let revealed = 0;
+    bubbleTypeTimers[id] = setInterval(() => {
+      revealed++;
+      drawBubbleFrame(id, layout, revealed);
+      if (bubbleTextures[id]) bubbleTextures[id].needsUpdate = true;
+      if (revealed >= total) { clearInterval(bubbleTypeTimers[id]); bubbleTypeTimers[id] = null; }
+    }, TYPE_INTERVAL);
   }
 
   function hideSpeechBubble(id) {
-    const ring = document.getElementById(`ring-${id}`);
-    if (ring) ring.setAttribute('visible', 'false');
+    // 進行中のタイプライターを止める(非表示後に描画が走らないように)
+    if (bubbleTypeTimers[id]) { clearInterval(bubbleTypeTimers[id]); bubbleTypeTimers[id] = null; }
 
+    // リング(目印)はここでは消さない。targetLost時のみ消し、映っている間は印を残す。
     const plane = document.getElementById(`bubble-plane-${id}`);
     if (!plane) return;
+    // 上下揺れを止めて定位置に戻す(次回表示がきれいにポップするように)
+    plane.removeAttribute('animation__bob');
+    if (plane.object3D) plane.object3D.position.y = 0.85;
     plane.setAttribute('animation', {
       property: 'scale',
       from: plane.getAttribute('scale'),
@@ -1449,13 +1569,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   modeBanterBtn.addEventListener('click', () => {
-    setUIMode('banter');
-    if (spirits.length >= 2) {
-      // 再タップでも強制リスタート (スタック時の回復手段)
-      stopBanterLoop();
-      banterHistory = [];
-      startBanter();
+    // 精霊が2体未満では会話できない。Scanタブのまま誘導トーストだけ出す。
+    if (spirits.length < 2) {
+      showToast('Summon 2 spirits to start a conversation');
+      return;
     }
+    setUIMode('banter');
+    // 再タップでも強制リスタート (スタック時の回復手段)
+    stopBanterLoop();
+    banterHistory = [];
+    startBanter();
   });
 
   // ===== リセットボタン (2回タップで確定) =====
@@ -1470,11 +1593,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     resetBtn.classList.add('confirm');
-    resetBtn.textContent = '確定？';
+    resetBtn.textContent = 'Confirm?';
     resetConfirmTimer = setTimeout(() => {
       resetConfirmTimer = null;
       resetBtn.classList.remove('confirm');
-      resetBtn.textContent = 'リセット';
+      resetBtn.textContent = 'Reset';
     }, 2000);
   });
 
@@ -1486,6 +1609,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     spirits.length = 0;
     visibleTargets.clear();
+    clearBanterVisibility();
     banterHistory = [];
     newcomerToAnnounce = null;
     currentSituation = null;
@@ -1502,9 +1626,8 @@ document.addEventListener('DOMContentLoaded', () => {
     uiMode = 'scan';
     activeVideo = videoElement;
 
-    resetBtn.textContent = 'リセット';
+    resetBtn.textContent = 'Reset';
     resetBtn.classList.add('hidden');
-    modeToggle.classList.add('hidden');
     updateSpiritCountBtn();
     videoElement.classList.remove('hidden-feed');
     modeScanBtn.classList.add('active');
@@ -1513,7 +1636,7 @@ document.addEventListener('DOMContentLoaded', () => {
     captureGuide.classList.remove('subtle');
     captureGuide.classList.remove('transparent');
     guideText.classList.remove('hidden');
-    guideText.textContent = '精霊を凝視して召喚せよ...';
+    guideText.textContent = 'Gaze at an object to summon its spirit...';
     scanStatus.textContent = '';
     clearOverlay();
     resetGaze();
@@ -1529,7 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isScanning) syncOverlayCanvas();
   });
 
-  showToast('タップして音声ON', true);
+  showToast('Tap to enable sound', true);
 
   // ===== デバッグ表示 =====
   const debugEl = document.getElementById('debug-overlay');
@@ -1560,10 +1683,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!started) return;
 
     if (spirits.length >= 2) {
-      showToast(`✨ ${spirits.length}体の精霊を復元しました`);
+      showToast(`✨ Restored ${spirits.length} spirits`);
       await enterAR(null);
     } else {
-      if (spirits.length === 1) showToast(`✨ ${spirits[0].name}を復元。もう1体見つけてください`);
+      if (spirits.length === 1) showToast(`✨ Restored ${spirits[0].name}. Find one more.`);
       startScanning();
     }
   })();
@@ -1576,7 +1699,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newWorker.addEventListener('statechange', () => {
           // 新しいSWがインストール済みで、かつ既存SWが動いている = アップデートあり
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            showToast('アップデートがあります — タップして再起動', true);
+            showToast('Update available — tap to restart', true);
             toastDiv.style.pointerEvents = 'auto';
             toastDiv.style.cursor = 'pointer';
             toastDiv.addEventListener('click', () => {

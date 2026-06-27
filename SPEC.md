@@ -131,7 +131,8 @@ ar_agents_2/
 
 | 変数 | 説明 |
 |---|---|
-| `GEMINI_API_KEY` | Google Gemini APIキー |
+| `OPENROUTER_API_KEY` | OpenRouter APIキー |
+| `OPENROUTER_MODEL` | 使用モデル (デフォルト: `google/gemma-3-27b-it`) |
 | `ELEVENLABS_API_KEY` | ElevenLabs APIキー |
 | `PORT` | ローカルサーバーポート (デフォルト: 3000) |
 

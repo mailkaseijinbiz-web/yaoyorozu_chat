@@ -1,7 +1,7 @@
 {
-  "name": "AR Agents 2 - 精霊召喚",
-  "short_name": "AR精霊",
-  "description": "器に精霊を宿らせ、ARで対話させましょう",
+  "name": "AR Agents 2 - Spirit Summoning",
+  "short_name": "AR Spirits",
+  "description": "Summon spirits into everyday objects and let them chat in AR",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "portrait",

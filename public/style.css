@@ -125,10 +125,10 @@ html, body {
   100% { top: 2%; }
 }
 
-/* 認識結果の表示 (画面下・白) */
+/* 認識結果の表示 (画面下・白)。モード切替タブ(下7%)と重ならないよう上に逃がす */
 #scan-status {
   position: absolute;
-  bottom: 7%;
+  bottom: 16%;
   left: 50%;
   transform: translateX(-50%);
   font-size: 17px;
