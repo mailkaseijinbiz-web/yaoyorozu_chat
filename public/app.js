@@ -42,6 +42,7 @@ AFRAME.registerComponent('billboard', {
 document.addEventListener('DOMContentLoaded', () => {
   // ===== チューニング用定数 =====
   const SPIRIT_STORAGE_KEY = 'ar_agents_2_spirits';
+  const MEMORY_STORAGE_KEY  = 'ar_agents_2_memory';
   const GAZE_DURATION = 2000;        // 凝視で注入完了までの時間(ms)
   const SCAN_INTERVAL = 700;         // AIスキャン(物体検出)の間隔(ms)
   const TURN_GAP_MS = 250;           // セリフ読み上げ後、次のターンまでの間(ms)
@@ -200,6 +201,29 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       return [];
     }
+  }
+
+  // ==========================================
+  // 会話メモリ (LocalStorage) — セッションをまたいで精霊が覚えている
+  // ==========================================
+  function banterMemoryKey() {
+    return spirits.map(s => s.name).sort().join('|');
+  }
+  function saveBanterMemory(history) {
+    if (!history || history.length === 0) return;
+    try {
+      const all = JSON.parse(localStorage.getItem(MEMORY_STORAGE_KEY) || '{}');
+      all[banterMemoryKey()] = history.slice(-15);
+      const keys = Object.keys(all);
+      if (keys.length > 10) delete all[keys[0]]; // 古い組み合わせを自動削除
+      localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(all));
+    } catch (e) {}
+  }
+  function loadBanterMemory() {
+    try {
+      const all = JSON.parse(localStorage.getItem(MEMORY_STORAGE_KEY) || '{}');
+      return all[banterMemoryKey()] || [];
+    } catch (e) { return []; }
   }
 
   // ==========================================
@@ -1688,6 +1712,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let banterSession = 0;
   let isBanterRunning = false;
   let banterHistory = [];
+  let banterMemory = [];         // 過去セッションの会話履歴 (turnCountには使わず記憶として渡す)
+  let banterMemoryLoaded = false; // このセッションで一度ロード済みか
   let banterTimeout = null;
   let pendingTurn = null;
   let newcomerToAnnounce = null;
@@ -1713,6 +1739,7 @@ document.addEventListener('DOMContentLoaded', () => {
         name: spirits[i].name, vessel: spirits[i].vessel, personality: spirits[i].personality
       })),
       history: filteredHistory,
+      memory: banterMemory.length > 0 ? banterMemory : undefined,
       newcomer: newcomerToAnnounce,
       situation: currentSituation,
       forceSpeaker,
@@ -1757,9 +1784,13 @@ document.addEventListener('DOMContentLoaded', () => {
     newcomerToAnnounce = newcomerName || null;
 
     // 新メンバー参加時は会話履歴をリセットし、起承転結を最初(起)からやり直す。
-    // (古い履歴が残っていると server 側の turnCount が大きいまま「結」になり、
-    //  歓迎する間もなく1ターンでオチがついて即終了してしまう)
     if (newcomerName) banterHistory = [];
+
+    // 過去セッションのメモリをロード (ページリロード後の初回 or 新メンバー参加時)
+    if (!banterMemoryLoaded || newcomerName) {
+      banterMemory = loadBanterMemory();
+      banterMemoryLoaded = true;
+    }
 
     // シチュエーションは初回/再開時のみ更新。新メンバー参加時は場面を維持する。
     if (!currentSituation || !newcomerName) {
@@ -1835,6 +1866,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     banterHistory.push({ name: spirits[idx].name, text: turn.data.reply });
     if (banterHistory.length > 15) banterHistory.shift();
+    saveBanterMemory(banterHistory); // 次回ページロード用に保存
 
     // 再生中に次のターンを先読み（現在映っている参加者で）してテンポを上げる
     // ただし、これが終了ターンの場合は次のターンを先読みしない
@@ -2153,6 +2185,8 @@ document.addEventListener('DOMContentLoaded', () => {
     visibleTargets.clear();
     clearBanterVisibility();
     banterHistory = [];
+    banterMemory = [];
+    banterMemoryLoaded = false;
     newcomerToAnnounce = null;
     currentSituation = null;
     pendingTurn = null;
@@ -2166,6 +2200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     compiledSpiritCount = 0;
     clearMindCache();
     localStorage.removeItem(SPIRIT_STORAGE_KEY);
+    localStorage.removeItem(MEMORY_STORAGE_KEY);
 
     mode = 'scan';
     uiMode = 'scan';

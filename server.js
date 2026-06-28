@@ -406,7 +406,7 @@ Rules:
 6. Return JSON only — no preamble or explanation.`;
 }
 
-function buildBanterPrompt(spirits, newcomer, turnCount, situation) {
+function buildBanterPrompt(spirits, newcomer, turnCount, situation, memory) {
   if (spirits.length === 1) return buildSoloPrompt(spirits[0], turnCount, situation);
   const cast = spirits.map((s, i) =>
     `[Spirit ${i} (agent${i})]
@@ -431,12 +431,16 @@ function buildBanterPrompt(spirits, newcomer, turnCount, situation) {
     phaseInstruction = "[Finale] This is the punchline that wraps up the conversation. Like the end of a comedy routine, land a humorous closing line and tie the conversation off cleanly (e.g. 'Alright, that's enough!', 'Oh, give it a rest!'). Since this line ends the conversation, set isEnd to true in the JSON.";
   }
 
+  const memorySection = (memory && memory.length > 0)
+    ? `\n[What these spirits said last time they met]\n${memory.map(h => `${h.name}: "${h.text}"`).join('\n')}\n(Past session — spirits may subtly reference or build on this. Don't repeat it verbatim.)\n`
+    : '';
+
   return `You are a skilled comedy writer composing a snappy, comedy-duo-style back-and-forth between spirits that inhabit everyday objects.
 The ${spirits.length} spirits on stage are:
 
 ${cast}
 ${newcomer ? `\n* "${newcomer}" has just joined the conversation! Have everyone welcome them or tease them.\n` : ''}
-
+${memorySection}
 ${sitText}
 
 Current conversation phase: ${phaseInstruction}
@@ -455,7 +459,7 @@ Rules:
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { spirits, history, newcomer, situation, forceSpeaker, language } = req.body;
+  const { spirits, history, memory, newcomer, situation, forceSpeaker, language } = req.body;
 
   if (!spirits || !Array.isArray(spirits) || spirits.length < 1) {
     return res.status(400).json({ error: 'At least 1 spirit is required' });
@@ -491,7 +495,7 @@ app.post('/api/banter', async (req, res) => {
   }
 
   try {
-    const systemPrompt = buildBanterPrompt(spirits, newcomer, turnCount, situation);
+    const systemPrompt = buildBanterPrompt(spirits, newcomer, turnCount, situation, memory);
 
     let conversation = 'Conversation so far:\n';
     if (history && history.length > 0) {
