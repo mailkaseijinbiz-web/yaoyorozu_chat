@@ -804,12 +804,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const sourceW = guideRect.width / scale;
     const sourceH = guideRect.height / scale;
 
-    snapshotCanvas.width = sourceW;
-    snapshotCanvas.height = sourceH;
+    // AI送信用に最大512pxに縮小 (転送量削減・高速化)
+    const MAX_DIM = 512;
+    const scale512 = Math.min(1, MAX_DIM / Math.max(sourceW, sourceH));
+    snapshotCanvas.width = Math.round(sourceW * scale512);
+    snapshotCanvas.height = Math.round(sourceH * scale512);
     const ctx = snapshotCanvas.getContext('2d');
-    ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
 
-    return snapshotCanvas.toDataURL('image/jpeg');
+    return snapshotCanvas.toDataURL('image/jpeg', 0.85);
   }
 
   async function runScanCycle() {
