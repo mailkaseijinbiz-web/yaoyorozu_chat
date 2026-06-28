@@ -1176,9 +1176,8 @@ document.addEventListener('DOMContentLoaded', () => {
     sqX = Math.max(0, Math.min(sqX, img.width - size));
     sqY = Math.max(0, Math.min(sqY, img.height - size));
 
-    // マーカーは一定サイズ(480px四方)に正規化する。小さすぎる切り出しはMindARの
-    // 特徴点抽出が弱く追跡しづらいため、最低限の解像度を確保する。
-    const TARGET = 480;
+    // 240pxに正規化: コンパイルピクセル数が480px比で1/4になり大幅に高速化
+    const TARGET = 240;
     const c = document.createElement('canvas');
     c.width = TARGET;
     c.height = TARGET;
@@ -1186,6 +1185,97 @@ document.addEventListener('DOMContentLoaded', () => {
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(img, sqX, sqY, size, size, 0, 0, TARGET, TARGET);
     return c.toDataURL('image/jpeg', 0.92);
+  }
+
+  // ==========================================
+  // ==========================================
+  // MindARコンパイル WebWorker
+  // ==========================================
+
+  const USE_MIND_WORKER = typeof OffscreenCanvas !== 'undefined' && typeof Worker !== 'undefined';
+
+  const MIND_AR_WORKER_SRC = `
+self.window = self;
+self.document = { createElement: (t) => t === 'canvas' ? new OffscreenCanvas(1, 1) : {} };
+importScripts('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-compiler.prod.js');
+self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
+  try {
+    const ocs = images.map(({ buf, w, h }) => {
+      const oc = new OffscreenCanvas(w, h);
+      oc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), w, h), 0, 0);
+      return oc;
+    });
+    let result;
+    if (prevBuffer) {
+      const nc = new MINDAR.IMAGE.Compiler();
+      await nc.compileImageTargets(ocs, p => self.postMessage({ id, type: 'progress', p }));
+      const pc = new MINDAR.IMAGE.Compiler();
+      pc.importData(prevBuffer);
+      pc.targetList = [...pc.targetList, ...nc.targetList];
+      result = await pc.exportData();
+    } else {
+      const c = new MINDAR.IMAGE.Compiler();
+      await c.compileImageTargets(ocs, p => self.postMessage({ id, type: 'progress', p }));
+      result = await c.exportData();
+    }
+    self.postMessage({ id, type: 'done', result }, result instanceof ArrayBuffer ? [result] : []);
+  } catch(e) {
+    self.postMessage({ id, type: 'error', msg: e.message });
+  }
+};
+`;
+
+  let _mindWorker = null;
+  function getMindWorker() {
+    if (!_mindWorker) {
+      const blob = new Blob([MIND_AR_WORKER_SRC], { type: 'text/javascript' });
+      _mindWorker = new Worker(URL.createObjectURL(blob));
+    }
+    return _mindWorker;
+  }
+
+  async function compileWithWorker(srcs, prevBuffer, onProgress) {
+    const imgData = await Promise.all(srcs.map(async src => {
+      const img = await loadImage(src);
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d').drawImage(img, 0, 0);
+      const { data, width, height } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+      return { buf: data.buffer.slice(0), w: width, h: height };
+    }));
+    return new Promise((resolve, reject) => {
+      const id = (Math.random() * 1e9 | 0).toString(36);
+      const worker = getMindWorker();
+      const handler = ({ data }) => {
+        if (data.id !== id) return;
+        if (data.type === 'progress') { onProgress && onProgress(data.p); return; }
+        worker.removeEventListener('message', handler);
+        data.type === 'done' ? resolve(data.result) : reject(new Error(data.msg));
+      };
+      worker.addEventListener('message', handler);
+      worker.postMessage({ id, images: imgData, prevBuffer: prevBuffer || null },
+        imgData.map(d => d.buf));
+    });
+  }
+
+  async function compileMindAR(srcs, prevBuffer, onProgress) {
+    if (USE_MIND_WORKER) {
+      try { return await compileWithWorker(srcs, prevBuffer, onProgress); }
+      catch(e) { console.warn('Worker compile failed, falling back to main thread:', e); }
+    }
+    // フォールバック: メインスレッド
+    const imgs = await Promise.all(srcs.map(loadImage));
+    if (prevBuffer) {
+      const nc = new window.MINDAR.IMAGE.Compiler();
+      await nc.compileImageTargets(imgs, onProgress);
+      const pc = new window.MINDAR.IMAGE.Compiler();
+      pc.importData(prevBuffer);
+      pc.targetList = [...pc.targetList, ...nc.targetList];
+      return pc.exportData();
+    }
+    const c = new window.MINDAR.IMAGE.Compiler();
+    await c.compileImageTargets(imgs, onProgress);
+    return c.exportData();
   }
 
   // ==========================================
@@ -1271,15 +1361,11 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (recompile && compiledMindBuffer && compiledSpiritCount > 0 && spirits.length > compiledSpiritCount) {
         // 差分コンパイル: 新規精霊分だけコンパイルし、以前の結果とマージ
         try {
-          const newImgs = await Promise.all(spirits.slice(compiledSpiritCount).map(s => loadImage(s.image)));
-          const newCompiler = new window.MINDAR.IMAGE.Compiler();
-          await newCompiler.compileImageTargets(newImgs, (p) => {
-            loadingText.textContent = `Summoning... ${Math.min(100, Math.round(p))}%`;
-          });
-          const prevCompiler = new window.MINDAR.IMAGE.Compiler();
-          prevCompiler.importData(compiledMindBuffer);
-          prevCompiler.targetList = [...prevCompiler.targetList, ...newCompiler.targetList];
-          buffer = await prevCompiler.exportData();
+          buffer = await compileMindAR(
+            spirits.slice(compiledSpiritCount).map(s => s.image),
+            compiledMindBuffer.slice(0),
+            (p) => { loadingText.textContent = `Summoning... ${Math.min(100, Math.round(p))}%`; }
+          );
         } catch (e) {
           console.warn('Incremental compile failed, falling back to full compile:', e);
           buffer = null;
@@ -1288,13 +1374,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!buffer) {
         // フルコンパイル (初回 / 差分不可 / 精霊削除後)
-        const imgs = await Promise.all(spirits.map(s => loadImage(s.image)));
-        const compiler = new window.MINDAR.IMAGE.Compiler();
-        await compiler.compileImageTargets(imgs, (p) => {
-          // recompile中はオーバーレイ非表示なのでloadingTextへの書き込みは無害
-          loadingText.textContent = `Extracting soul... ${Math.min(100, Math.round(p))}%`;
-        });
-        buffer = await compiler.exportData();
+        buffer = await compileMindAR(
+          spirits.map(s => s.image),
+          null,
+          (p) => { loadingText.textContent = `Extracting soul... ${Math.min(100, Math.round(p))}%`; }
+        );
       }
 
       // 次回の差分コンパイルとキャッシュのために保存
