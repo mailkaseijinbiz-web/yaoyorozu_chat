@@ -109,8 +109,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastBanterAt = 0;      // lastBanterMsを更新した時刻
   // スキャン方式: 'auto'=一定間隔で自動 / 'manual'=画面タップで1回ずつ。設定で切替・永続化。
   // 既定は manual(画面タップでスキャン開始)。設定で auto に切替可能。
-  const SCAN_MODE_KEY = 'ar_agents_2_scan_mode';
-  let scanMode = localStorage.getItem(SCAN_MODE_KEY) === 'auto' ? 'auto' : 'manual';
 
   // 推論モデルプリセット: 'cerebras'(高速) / 'gemma4'(標準ルーティング)
   const MODEL_PRESET_KEY = 'ar_agents_2_model';
@@ -709,15 +707,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateGuideUI() {
     const color = '#00e5ff';
-    if (scanMode === 'manual') {
-      guideText.textContent = mode === 'scan'
-        ? 'Tap the screen to scan an object'
-        : 'Tap the screen to scan a new object';
-    } else if (mode === 'scan') {
-      guideText.textContent = 'Gaze at an object to summon its spirit...';
-    } else {
-      guideText.textContent = 'Point at new objects to add more spirits';
-    }
+    guideText.textContent = mode === 'scan'
+      ? 'Tap the screen to scan an object'
+      : 'Tap the screen to scan a new object';
     scanStatus.textContent = '';
     guideText.style.borderColor = color;
     guideText.style.boxShadow = `0 0 14px ${color}59`;
@@ -727,12 +719,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateScanGuideVisibility();
   }
 
-  // スキャンライン: スキャンUI表示中かつスキャン稼働中は常に表示 (凝視中は矩形の塗り潰しが進行表示になる)
-  // mode('scan'/'ar')ではなくuiModeで判定し、AR中にScanタブで追加召喚する間も出るようにする。
   function updateScanLine() {
-    // autoは常時スイープ。manualはタップでスキャン中(リクエスト中)だけ表示する。
-    const show = uiMode === 'scan' && isScanning && gazeStartTime === null
-      && (scanMode === 'auto' || isRequestPending);
+    const show = uiMode === 'scan' && isScanning && gazeStartTime === null && isRequestPending;
     scanLine.classList.toggle('hidden', !show);
   }
 
@@ -745,8 +733,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateGuideUI();
     syncOverlayCanvas();
     clearOverlay();
-    // autoは連続スキャンを開始。manualはタップ(triggerScan)を待つ。
-    if (scanMode === 'auto') runScanCycle();
   }
 
   function stopScanning() {
@@ -827,23 +813,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isCompiling) {
       clearOverlay();
       resetGaze();
-      if (scanMode === 'auto') scanTimeout = setTimeout(runScanCycle, SCAN_INTERVAL);
       return;
     }
 
-    if (!activeVideo || activeVideo.videoWidth === 0) {
-      if (scanMode === 'auto') scanTimeout = setTimeout(runScanCycle, 300);
-      return;
-    }
+    if (!activeVideo || activeVideo.videoWidth === 0) return;
 
     const dataUrl = captureGuideRegion();
-    if (!dataUrl) {
-      if (scanMode === 'auto') scanTimeout = setTimeout(runScanCycle, 300);
-      return;
-    }
+    if (!dataUrl) return;
+
     isRequestPending = true;
-    scanReqStart = performance.now(); // 通信中はこの開始時刻からの経過をライブ表示
-    if (scanMode === 'manual') updateScanLine(); // タップ中はスキャンライン表示
+    scanReqStart = performance.now();
+    updateScanLine(); // タップ中はスキャンライン表示
 
     try {
       const response = await fetch('/api/segment-vessels', {
@@ -938,12 +918,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (scanSessionId === session) resetGaze();
     } finally {
       isRequestPending = false;
-      scanReqStart = null; // 通信終了。以後は確定したlastScanMsを表示
-      if (scanMode === 'manual') updateScanLine(); // タップスキャン終了でスキャンラインを消す
-      // autoのみ次サイクルを予約。manualはタップごとに1回だけ。
-      if (scanMode === 'auto' && isScanning && scanSessionId === session) {
-        scanTimeout = setTimeout(runScanCycle, SCAN_INTERVAL);
-      }
+      scanReqStart = null;
+      updateScanLine(); // タップスキャン終了でスキャンラインを消す
     }
   }
 
@@ -1626,33 +1602,6 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     localStorage.setItem(TTS_STORAGE_KEY, engine);
     updateTtsUI();
   }
-  // ===== 設定パネル: スキャン方式(auto/manual)の切替 =====
-  function updateScanModeUI() {
-    const autoBtn = document.getElementById('scan-auto');
-    const manBtn = document.getElementById('scan-manual');
-    const hint = document.getElementById('scan-hint');
-    if (autoBtn) autoBtn.classList.toggle('active', scanMode === 'auto');
-    if (manBtn) manBtn.classList.toggle('active', scanMode === 'manual');
-    if (hint) hint.textContent = scanMode === 'manual'
-      ? "Tap the screen to scan one object at a time."
-      : "Continuously scans the camera automatically.";
-  }
-  function setScanMode(m) {
-    const next = m === 'auto' ? 'auto' : 'manual';
-    if (next === scanMode) return;
-    scanMode = next;
-    localStorage.setItem(SCAN_MODE_KEY, next);
-    updateScanModeUI();
-    if (uiMode === 'scan') {
-      updateGuideUI();
-      // autoへ切替時、スキャン中なら連続ループを再開
-      if (scanMode === 'auto' && isScanning && !isRequestPending) {
-        if (scanTimeout) { clearTimeout(scanTimeout); scanTimeout = null; }
-        runScanCycle();
-      }
-    }
-  }
-
   // ===== 設定パネル: 言語の切替 =====
   const langSelect = document.getElementById('lang-select');
   if (langSelect) {
@@ -1687,19 +1636,16 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     updateModelUI();
   }
 
-  function openSettings() { settingsPanel.classList.add('open'); updateTtsUI(); updateScanModeUI(); updateModelUI(); }
+  function openSettings() { settingsPanel.classList.add('open'); updateTtsUI(); updateModelUI(); }
   function closeSettings() { settingsPanel.classList.remove('open'); }
   settingsBtn.addEventListener('click', openSettings);
   document.getElementById('settings-backdrop').addEventListener('click', closeSettings);
   document.getElementById('settings-close').addEventListener('click', closeSettings);
   document.getElementById('tts-elevenlabs').addEventListener('click', () => setTtsEngine('elevenlabs'));
   document.getElementById('tts-standalone').addEventListener('click', () => setTtsEngine('standalone'));
-  document.getElementById('scan-auto').addEventListener('click', () => setScanMode('auto'));
-  document.getElementById('scan-manual').addEventListener('click', () => setScanMode('manual'));
   document.getElementById('model-cerebras').addEventListener('click', () => setModelPreset('cerebras'));
   document.getElementById('model-gemma4').addEventListener('click', () => setModelPreset('gemma4'));
   updateTtsUI();
-  updateScanModeUI();
   updateModelUI();
 
   // ===== Standalone TTS (Web Speech API) =====
