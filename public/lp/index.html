@@ -360,59 +360,90 @@
     /* ── COMPARISON CARD ── */
     .cmp-card {
       background: rgba(255,255,255,.04);
-      border: 1px solid rgba(0,229,255,.2);
+      border: 1px solid rgba(0,229,255,.3);
       border-radius: 24px; padding: 28px 24px;
-      box-shadow: 0 0 60px rgba(0,229,255,.08), inset 0 1px 0 rgba(255,255,255,.06);
+      box-shadow: 0 0 80px rgba(0,229,255,.18), 0 0 160px rgba(124,77,255,.1), inset 0 1px 0 rgba(255,255,255,.08);
+      position: relative; overflow: hidden;
+    }
+    .cmp-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent1), var(--accent2), transparent);
     }
     .cmp-header {
       display: grid; grid-template-columns: 1fr 1fr;
-      gap: 10px; margin-bottom: 22px;
+      gap: 10px; margin-bottom: 24px;
     }
     .cmp-col-head {
       text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .6px;
-      text-transform: uppercase; padding: 7px 10px; border-radius: 8px;
+      text-transform: uppercase; padding: 8px 10px; border-radius: 8px;
     }
     .cmp-col-head.cerebras {
-      background: rgba(0,229,255,.12); color: var(--accent1);
-      border: 1px solid rgba(0,229,255,.25);
+      background: rgba(0,229,255,.15); color: var(--accent1);
+      border: 1px solid rgba(0,229,255,.4);
+      box-shadow: 0 0 16px rgba(0,229,255,.15);
     }
     .cmp-col-head.std {
       background: rgba(255,255,255,.04); color: var(--muted);
       border: 1px solid rgba(255,255,255,.08);
     }
-    .cmp-metric { margin-bottom: 18px; }
+    .cmp-metric { margin-bottom: 22px; }
     .cmp-metric:last-of-type { margin-bottom: 0; }
     .cmp-metric-label {
-      font-size: 11px; color: var(--muted); font-weight: 600;
-      letter-spacing: .4px; text-transform: uppercase; margin-bottom: 8px;
+      font-size: 11px; color: rgba(255,255,255,.45); font-weight: 600;
+      letter-spacing: .4px; text-transform: uppercase; margin-bottom: 10px;
     }
+    .cmp-metric-label .arrow { color: var(--accent1); font-weight: 900; }
     .cmp-vals {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;
     }
     .cmp-val {
-      border-radius: 10px; padding: 10px 12px; text-align: center; line-height: 1;
+      border-radius: 10px; padding: 12px; text-align: center; line-height: 1;
+    }
+    @keyframes cmpPulse {
+      0%, 100% { box-shadow: 0 0 10px rgba(0,229,255,.2), inset 0 0 10px rgba(0,229,255,.05); }
+      50%       { box-shadow: 0 0 28px rgba(0,229,255,.5), inset 0 0 18px rgba(0,229,255,.12); }
     }
     .cmp-val.cerebras {
-      background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.2);
-      font-family: 'Bangers', sans-serif; font-size: 22px; color: var(--accent1);
+      background: rgba(0,229,255,.1); border: 1px solid rgba(0,229,255,.35);
+      font-family: 'Bangers', sans-serif; font-size: 28px; color: var(--accent1);
+      animation: cmpPulse 2.8s ease-in-out infinite;
+      letter-spacing: 1px;
     }
     .cmp-val.std {
       background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-      font-size: 15px; font-weight: 600; color: var(--muted);
+      font-size: 15px; font-weight: 600; color: rgba(255,255,255,.35);
       display: flex; align-items: center; justify-content: center;
     }
-    .cmp-bar-group { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+    .cmp-bar-group { display: flex; flex-direction: column; gap: 7px; }
     .cmp-bar-row { display: flex; align-items: center; gap: 8px; }
-    .cmp-bar-who { font-size: 9px; width: 64px; color: var(--muted); text-align: right; flex-shrink: 0; }
-    .cmp-bar-track { flex: 1; height: 5px; background: rgba(255,255,255,.06); border-radius: 100px; overflow: hidden; }
-    .cmp-bar-fill { height: 100%; border-radius: 100px; animation: barGrow 1.8s cubic-bezier(.4,0,.2,1) both; }
-    .cmp-bar-fill.c { background: linear-gradient(90deg, var(--accent2), var(--accent1)); }
-    .cmp-bar-fill.s { background: rgba(255,255,255,.18); }
+    .cmp-bar-who { font-size: 9px; width: 56px; color: rgba(255,255,255,.35); text-align: right; flex-shrink: 0; }
+    .cmp-bar-track { flex: 1; height: 10px; background: rgba(255,255,255,.05); border-radius: 100px; overflow: hidden; }
+    .cmp-bar-fill {
+      height: 100%; border-radius: 100px;
+      width: 0; animation: none;
+    }
+    .cmp-card.in-view .cmp-bar-fill {
+      animation: barGrow 1.6s cubic-bezier(.4,0,.2,1) both;
+      animation-delay: var(--bar-delay, 0s);
+      width: var(--bar-w, 0);
+    }
+    .cmp-bar-fill.c {
+      background: linear-gradient(90deg, var(--accent2), var(--accent1));
+      box-shadow: 0 0 10px rgba(0,229,255,.7), 0 0 20px rgba(0,229,255,.35);
+    }
+    .cmp-bar-fill.s { background: rgba(255,255,255,.15); }
+    .cmp-speedup {
+      font-size: 9px; font-weight: 700; letter-spacing: .3px;
+      color: #ffd740; background: rgba(255,215,0,.1);
+      border: 1px solid rgba(255,215,0,.25);
+      padding: 2px 7px; border-radius: 100px; flex-shrink: 0; white-space: nowrap;
+    }
     .cmp-badge {
-      margin-top: 20px; padding: 11px 14px;
-      background: linear-gradient(135deg, rgba(0,229,255,.12), rgba(124,77,255,.15));
-      border: 1px solid rgba(0,229,255,.2); border-radius: 12px;
-      text-align: center; font-weight: 700; font-size: 13px; color: var(--accent1);
+      margin-top: 22px; padding: 13px 16px;
+      background: linear-gradient(135deg, rgba(0,229,255,.14), rgba(124,77,255,.18));
+      border: 1px solid rgba(0,229,255,.3); border-radius: 12px;
+      text-align: center; font-weight: 700; font-size: 14px; color: var(--accent1);
+      box-shadow: 0 0 30px rgba(0,229,255,.1);
     }
 
     /* ── USE CASES ── */
@@ -630,7 +661,7 @@
 
         <!-- Spirit generation -->
         <div class="cmp-metric">
-          <div class="cmp-metric-label">Spirit generation &nbsp;↓ lower is faster</div>
+          <div class="cmp-metric-label">Spirit generation &nbsp;<span class="arrow">↓</span> lower is faster</div>
           <div class="cmp-vals">
             <div class="cmp-val cerebras">&lt; 1 sec</div>
             <div class="cmp-val std">~8 sec</div>
@@ -638,18 +669,19 @@
           <div class="cmp-bar-group">
             <div class="cmp-bar-row">
               <span class="cmp-bar-who">Cerebras</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="width:12%; animation-delay:.1s"></div></div>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:12%;--bar-delay:.1s"></div></div>
             </div>
             <div class="cmp-bar-row">
               <span class="cmp-bar-who">Standard</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="width:95%; animation-delay:.3s"></div></div>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.3s"></div></div>
+              <span class="cmp-speedup">8× slower</span>
             </div>
           </div>
         </div>
 
         <!-- Banter response -->
         <div class="cmp-metric">
-          <div class="cmp-metric-label">Banter response &nbsp;↓ lower is faster</div>
+          <div class="cmp-metric-label">Banter response &nbsp;<span class="arrow">↓</span> lower is faster</div>
           <div class="cmp-vals">
             <div class="cmp-val cerebras">&lt; 800ms</div>
             <div class="cmp-val std">~5 sec</div>
@@ -657,11 +689,12 @@
           <div class="cmp-bar-group">
             <div class="cmp-bar-row">
               <span class="cmp-bar-who">Cerebras</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="width:15%; animation-delay:.2s"></div></div>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:15%;--bar-delay:.2s"></div></div>
             </div>
             <div class="cmp-bar-row">
               <span class="cmp-bar-who">Standard</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="width:95%; animation-delay:.4s"></div></div>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.4s"></div></div>
+              <span class="cmp-speedup">6× slower</span>
             </div>
           </div>
         </div>
@@ -867,6 +900,17 @@
   }, { threshold: 0.3 });
 
   document.querySelectorAll('.uc-card').forEach(card => observer.observe(card));
+
+  const cmpCard = document.querySelector('.cmp-card');
+  if (cmpCard) {
+    const cmpObs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        cmpCard.classList.add('in-view');
+        cmpObs.disconnect();
+      }
+    }, { threshold: 0.25 });
+    cmpObs.observe(cmpCard);
+  }
 </script>
 
 </body>
