@@ -235,45 +235,59 @@ const LANG_NAMES = { en: 'English', ja: 'Japanese', zh: 'Simplified Chinese', ko
 function langName(code) { return LANG_NAMES[code] || 'English'; }
 
 // ==========================================
-// OpenRouter (OpenAI互換API) — google/gemma-3-27b-it
+// Cerebras 直接API
+// ==========================================
+const CEREBRAS_API_URL = 'https://api.cerebras.ai/v1/chat/completions';
+const CEREBRAS_MODEL = 'gemma4-31b';
+const hasCerebrasKey = !!process.env.CEREBRAS_API_KEY;
+
+// OpenRouter (OpenAI互換API) — フォールバック / OpenRouterプリセット用
 // ==========================================
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-3-27b-it';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// 推論プロバイダの優先順位 (例: "Cerebras" や "Cerebras,Groq")。
-// 既定は Cerebras を優先。指定モデルをそのプロバイダが提供していなければ
-// allow_fallbacks=true により他プロバイダへ自動フォールバックする。
-const OPENROUTER_PROVIDERS = (process.env.OPENROUTER_PROVIDER || 'Cerebras')
+const OPENROUTER_PROVIDERS = (process.env.OPENROUTER_PROVIDER || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 const OPENROUTER_ALLOW_FALLBACKS = process.env.OPENROUTER_ALLOW_FALLBACKS !== 'false';
 
 const hasApiKey = !!process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== 'your_openrouter_api_key_here';
 
-if (!hasApiKey) {
-  console.warn('OPENROUTER_API_KEY is not set — starting in DEMO mode (fixed responses).');
+if (!hasApiKey && !hasCerebrasKey) {
+  console.warn('No API key set — starting in DEMO mode (fixed responses).');
 }
 
-// OpenRouterのchat completionsを呼び、本文テキストを返す。
-// Gemmaはレスポンススキーマ非対応のため、JSON整形はプロンプト指示＋parseJSONSafeで担保する。
-// モデルプリセット定義
-const MODEL_PRESETS = {
-  cerebras: {
-    model: 'google/gemma-4-31b-it',
-    providers: ['Cerebras'],
-    allowFallbacks: true
-  },
-  gemma4: {
-    model: 'google/gemma-4-31b-it',
-    providers: [],          // Cerebras縛りなし — OpenRouter標準ルーティング
-    allowFallbacks: true
-  }
-};
+// Cerebras 直接呼び出し (OpenAI互換)
+async function callCerebras({ messages, temperature }) {
+  const response = await fetch(CEREBRAS_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.CEREBRAS_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: CEREBRAS_MODEL,
+      messages,
+      ...(temperature != null ? { temperature } : {})
+    })
+  });
 
-async function callOpenRouter({ messages, temperature, modelPreset }) {
-  const preset = MODEL_PRESETS[modelPreset] || MODEL_PRESETS.cerebras;
-  const model = preset.model;
-  const providers = preset.providers.length ? preset.providers : OPENROUTER_PROVIDERS;
-  const allowFallbacks = preset.allowFallbacks;
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Cerebras API failed (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string') {
+    throw new Error(`Cerebras returned no text content: ${JSON.stringify(data)}`);
+  }
+  pushLog(`[LLM ${ts()}] ${CEREBRAS_MODEL} via Cerebras (direct)`);
+  return text;
+}
+
+// OpenRouter 呼び出し (gemma4プリセット / segment-vessels用)
+async function callOpenRouter({ messages, temperature }) {
+  const model = 'google/gemma-4-31b-it';
 
   const response = await fetch(OPENROUTER_URL, {
     method: 'POST',
@@ -287,7 +301,7 @@ async function callOpenRouter({ messages, temperature, modelPreset }) {
       model,
       messages,
       ...(temperature != null ? { temperature } : {}),
-      ...(providers.length ? { provider: { order: providers, allow_fallbacks: allowFallbacks } } : {})
+      ...(OPENROUTER_PROVIDERS.length ? { provider: { order: OPENROUTER_PROVIDERS, allow_fallbacks: OPENROUTER_ALLOW_FALLBACKS } } : {})
     })
   });
 
@@ -301,9 +315,16 @@ async function callOpenRouter({ messages, temperature, modelPreset }) {
   if (typeof text !== 'string') {
     throw new Error(`OpenRouter returned no text content: ${JSON.stringify(data)}`);
   }
-  // 実際に推論を担当したプロバイダをログ(Cerebrasが使われたか確認できる)
   if (data && data.provider) pushLog(`[LLM ${ts()}] ${model} via ${data.provider}`);
   return text;
+}
+
+// プリセットに応じてCerebras直接 or OpenRouterに振り分け
+async function callLLM({ messages, temperature, modelPreset }) {
+  if (modelPreset === 'cerebras' && hasCerebrasKey) {
+    return callCerebras({ messages, temperature });
+  }
+  return callOpenRouter({ messages, temperature });
 }
 
 function parseJSONSafe(text) {
@@ -490,7 +511,7 @@ app.post('/api/banter', async (req, res) => {
   const forcedIdx = (typeof forceSpeaker === 'string' && agentIds.includes(forceSpeaker))
     ? parseInt(forceSpeaker.replace('agent', ''), 10) : -1;
 
-  if (!hasApiKey) {
+  if (!hasApiKey && !hasCerebrasKey) {
     const speaker = forcedIdx >= 0 ? forcedIdx : turnCount % spirits.length;
     let demoLines;
     if (spirits.length === 1) {
@@ -558,7 +579,7 @@ app.post('/api/banter', async (req, res) => {
       ? `\n\nIMPORTANT: The next speaker MUST be ${forceSpeaker} (${spirits[forcedIdx].name}). Set "nextSpeaker" to "${forceSpeaker}" and write the line in that spirit's voice. Do NOT end the conversation here ("isEnd" must be false).`
       : '';
 
-    const text = await callOpenRouter({
+    const text = await callLLM({
       temperature: 1.0,
       modelPreset,
       messages: [
@@ -654,7 +675,7 @@ app.all('/api/tts', async (req, res) => {
 if (require.main === module) {
   app.listen(port, () => {
     console.log(`AR Agents 2 prototype running at http://localhost:${port}`);
-    console.log(`Mode: ${hasApiKey ? `OpenRouter (${OPENROUTER_MODEL})` : 'DEMO (no API key)'}`);
+    console.log(`Mode: ${hasCerebrasKey ? `Cerebras (${CEREBRAS_MODEL})` : hasApiKey ? `OpenRouter (${OPENROUTER_MODEL})` : 'DEMO (no API key)'}`);
   });
 }
 
