@@ -582,3 +582,74 @@ html, body {
   appearance: none;
 }
 .settings-select option { color: #000; }
+
+/* ===== 横画面対応 (mobile landscape) ===== */
+@media (orientation: landscape) and (max-height: 520px) {
+
+  /* ガイド枠: 画面の高さを基準にサイズを決め、真ん中に配置 */
+  #capture-guide,
+  #camera-overlay-canvas {
+    width: calc(100vh - 120px);
+    height: calc(100vh - 120px);
+    transform: translate(-50%, -50%);
+  }
+
+  /* ガイドテキスト: コンパクトに上端へ */
+  #guide-text {
+    top: 3%;
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  /* スキャンステータス: モードトグルの直上 */
+  #scan-status {
+    bottom: 54px;
+    font-size: 13px;
+  }
+
+  /* トースト: 少し高めに */
+  #toast {
+    top: 6%;
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+
+  /* 下部コントロール: パーセントを廃止して固定pxへ */
+  #mode-toggle {
+    bottom: 6px;
+  }
+  #settings-btn {
+    bottom: 6px;
+    left: 8px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+  #reset-btn {
+    bottom: 6px;
+    right: 8px;
+    padding: 9px 14px;
+    font-size: 12px;
+  }
+
+  /* 精霊カウント: 上端 */
+  #spirit-count-btn {
+    top: 8px;
+    left: 8px;
+  }
+
+  /* ボトムシート: 横画面では高さを制限してスクロール可能に */
+  #spirit-panel-sheet {
+    max-height: 70vh;
+    padding-bottom: 16px;
+    overflow-y: auto;
+  }
+  #panel-chat {
+    max-height: 25vh;
+  }
+  #settings-sheet {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding-bottom: 16px;
+  }
+}
