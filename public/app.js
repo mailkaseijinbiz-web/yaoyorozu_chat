@@ -1238,6 +1238,13 @@ document.addEventListener('DOMContentLoaded', () => {
     stopScanning();
     stopBanterLoop();
 
+    // コンパイル中にbanter先読みを並行実行（全精霊を参加者として最初のセリフを取得）
+    preFetchedBanterTurn = null;
+    if (spirits.length >= 1) {
+      newcomerToAnnounce = newcomerName || null;
+      preFetchedBanterTurn = fetchTurn([...spirits.keys()]);
+    }
+
     // ARが既に動いている場合: コンパイルを先行させてARシーンを見せ続け、
     // 差し替え直前だけ短時間オーバーレイを出す（3〜8秒のブラックアウトを解消）。
     // 初回コンパイル(スキャンモード): 従来どおりフルオーバーレイ。
@@ -1759,6 +1766,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let banterMemoryLoaded = false; // このセッションで一度ロード済みか
   let banterTimeout = null;
   let pendingTurn = null;
+  let preFetchedBanterTurn = null; // ARコンパイル中に先読みした最初のターン
   let newcomerToAnnounce = null;
   let forcedSpeakerIdx = -1; // タップで指定された次の話者(グローバルindex)。-1で未指定。
 
@@ -1841,6 +1849,13 @@ document.addEventListener('DOMContentLoaded', () => {
       currentSituation = SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
     }
     console.log('Current Situation:', currentSituation);
+
+    // ARコンパイル中に先読みしたターンがあれば即座に使う
+    if (preFetchedBanterTurn) {
+      pendingTurn = preFetchedBanterTurn;
+      preFetchedBanterTurn = null;
+      newcomerToAnnounce = null; // 先読み時に既に送信済み
+    }
 
     runBanterTurn(banterSession);
   }
