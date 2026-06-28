@@ -58,6 +58,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const flashOverlay = document.getElementById('flash-overlay');
   const loadingOverlay = document.getElementById('loading-overlay');
   const loadingText = document.getElementById('loading-text');
+  const preSpeechEl = document.getElementById('pre-speech');
+  const preSpeechNameEl = document.getElementById('pre-speech-name');
+  const preSpeechTextEl = document.getElementById('pre-speech-text');
   const snapshotCanvas = document.getElementById('snapshot-canvas');
   const arSceneContainer = document.getElementById('ar-scene-container');
   const toastDiv = document.getElementById('toast');
@@ -1330,9 +1333,17 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
     // コンパイル中にbanter先読みを並行実行（全精霊を参加者として最初のセリフを取得）
     preFetchedBanterTurn = null;
+    hidePreSpeechBubble();
     if (spirits.length >= 1) {
       newcomerToAnnounce = newcomerName || null;
       preFetchedBanterTurn = fetchTurn([...spirits.keys()]);
+      // 先読み完了したらすぐに2Dフキダシ表示（ARを待たない）
+      preFetchedBanterTurn.then(turn => {
+        if (isCompiling && turn && turn.data && turn.data.reply) {
+          const name = spirits[turn.globalIdx]?.name || spirits[0]?.name || '';
+          showPreSpeechBubble(name, turn.data.reply);
+        }
+      }).catch(() => {});
     }
 
     // ARが既に動いている場合: コンパイルを先行させてARシーンを見せ続け、
@@ -1941,7 +1952,18 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       newcomerToAnnounce = null; // 先読み時に既に送信済み
     }
 
+    hidePreSpeechBubble();
     runBanterTurn(banterSession);
+  }
+
+  function showPreSpeechBubble(name, text) {
+    if (!preSpeechEl) return;
+    preSpeechNameEl.textContent = name;
+    preSpeechTextEl.textContent = text;
+    preSpeechEl.classList.remove('hidden');
+  }
+  function hidePreSpeechBubble() {
+    if (preSpeechEl) preSpeechEl.classList.add('hidden');
   }
 
   function stopBanterLoop() {
