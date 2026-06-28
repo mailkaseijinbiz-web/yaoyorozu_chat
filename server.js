@@ -258,7 +258,7 @@ if (!hasApiKey) {
 // モデルプリセット定義
 const MODEL_PRESETS = {
   cerebras: {
-    model: 'google/gemma-3-27b-it',
+    model: 'google/gemma-4-31b-it',
     providers: ['Cerebras'],
     allowFallbacks: true
   },
