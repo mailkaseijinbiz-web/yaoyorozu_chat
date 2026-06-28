@@ -1506,14 +1506,13 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     if (!banterAudio) banterAudio = new Audio();
     banterAudio.src = SILENT_WAV;
     banterAudio.play().then(() => hideToast()).catch(() => {});
-    // iOS対策: Web Speechは「ユーザー操作中に一度speak()する」までプログラム発話がブロックされる。
-    // 無音の短い発話をこのタップ内で流して解除しておく(resumeだけでは解除されない)。
+    // iOS対策: volume=0では解除されないケースがあるため極小音量で解除
     if (speechSupported) {
       try {
         const warm = new SpeechSynthesisUtterance(' ');
-        warm.volume = 0;
-        window.speechSynthesis.speak(warm); // このタップ内のspeak()でロック解除
+        warm.volume = 0.01;
         window.speechSynthesis.resume();
+        window.speechSynthesis.speak(warm);
       } catch (e) {}
     }
     audioUnlocked = true;
@@ -1672,6 +1671,18 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     return pool.find(v => want.test(v.name)) || pool[0] || null;
   }
 
+  // iOS: speechSynthesisは約30秒でOSに一時停止される → 定期的にresume()して防ぐ
+  let synthKeepAlive = null;
+  function startSynthKeepAlive() {
+    if (synthKeepAlive) return;
+    synthKeepAlive = setInterval(() => {
+      try { window.speechSynthesis.resume(); } catch (e) {}
+    }, 5000);
+  }
+  function stopSynthKeepAlive() {
+    if (synthKeepAlive) { clearInterval(synthKeepAlive); synthKeepAlive = null; }
+  }
+
   // Standaloneで1セリフを読み上げ、終了時 onEnd(spoke) を呼ぶ
   function speakStandalone(spiritIndex, text, onEnd) {
     if (!speechSupported || !text) { onEnd(false); return; }
@@ -1691,19 +1702,26 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       if (done) return;
       done = true;
       clearTimeout(wd);
+      stopSynthKeepAlive();
       setSpeakingState(false);
       onEnd(spoke);
     };
-    // 発話長に応じたウォッチドッグ(onendが来ない端末の保険)
     const wd = setTimeout(() => finish(true), Math.min(20000, 1500 + text.length * 110));
+    u.onstart = () => { setSpeakingState(true); startSynthKeepAlive(); };
     u.onend = () => finish(true);
-    u.onerror = (e) => { lastBanterErr = 'tts:' + ((e && e.error) || 'err'); finish(false); };
+    u.onerror = (e) => {
+      // 'interrupted' は stopSpeaking() による意図的なキャンセル。エラー扱いしない。
+      if (e && e.error === 'interrupted') { finish(false); return; }
+      lastBanterErr = 'tts:' + ((e && e.error) || 'err');
+      finish(false);
+    };
 
-    // iOS: cancel()直後のspeak()は無音になりがち。発話中のときだけcancelし、少し待ってから話す。
-    u.onstart = () => setSpeakingState(true);
-    const go = () => { try { synth.resume(); synth.speak(u); } catch (e) { finish(false); } };
+    const go = () => {
+      try { synth.resume(); synth.speak(u); }
+      catch (e) { finish(false); }
+    };
     try {
-      if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(go, 120); }
+      if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(go, 150); }
       else go();
     } catch (e) { finish(false); }
   }
@@ -1798,6 +1816,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       banterAudio.removeAttribute('src');
     }
     if (speechSupported) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+    stopSynthKeepAlive();
     setSpeakingState(false);
   }
 
