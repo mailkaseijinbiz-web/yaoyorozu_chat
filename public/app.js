@@ -1557,7 +1557,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gBtn) gBtn.classList.toggle('active', modelPreset === 'gemma4');
     if (hint) hint.textContent = modelPreset === 'cerebras'
       ? '⚡ Cerebras: ultra-fast inference (Gemma 3 27B).'
-      : 'Gemma 4: standard OpenRouter routing.';
+      : 'OpenRouter: standard routing (Gemma 4 31B).';
   }
   function setModelPreset(p) {
     const next = p === 'gemma4' ? 'gemma4' : 'cerebras';
