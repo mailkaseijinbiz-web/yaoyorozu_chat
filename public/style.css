@@ -279,6 +279,9 @@ html, body {
   left: 12px;
   z-index: 25;
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 6px 13px;
   font-size: 12px;
   font-weight: bold;
@@ -290,7 +293,33 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  transition: border-color 0.3s, color 0.3s;
 }
+#spirit-count-btn.speaking {
+  border-color: rgba(0, 229, 255, 0.7);
+  color: #00e5ff;
+}
+.speaking-waves {
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.speaking-waves span {
+  display: inline-block;
+  width: 3px;
+  background: #00e5ff;
+  border-radius: 2px;
+  animation: wave-bar 0.7s ease-in-out infinite;
+}
+.speaking-waves span:nth-child(1) { height: 5px;  animation-delay: 0s; }
+.speaking-waves span:nth-child(2) { height: 10px; animation-delay: 0.15s; }
+.speaking-waves span:nth-child(3) { height: 5px;  animation-delay: 0.3s; }
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.5; }
+  50%       { transform: scaleY(1.2); opacity: 1; }
+}
+#spirit-count-btn.speaking .speaking-waves { display: inline-flex; }
 
 /* ===== 精霊一覧パネル ===== */
 #spirit-panel {

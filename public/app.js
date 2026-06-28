@@ -303,6 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function openSpiritPanel() {
     renderSpiritPanel();
     spiritPanel.classList.add('open');
+    startPanelChat();
   }
 
   function closeSpiritPanel() {
@@ -448,15 +449,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function startPanelChat() {
     if (spirits.length < 1) { showToast('Summon a spirit first'); return; }
-    stopBanterLoop(); // ARの会話と音声がかぶらないように止める
+    stopBanterLoop();
     panelChatSession++;
     panelChatRunning = true;
     panelHistory = [];
     panelSituation = SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
     const chat = document.getElementById('panel-chat');
     if (chat) { chat.classList.remove('hidden'); chat.innerHTML = ''; }
-    const btn = document.getElementById('panel-chat-btn');
-    if (btn) { btn.textContent = 'Stop conversation'; btn.classList.add('on'); }
     runPanelTurn(panelChatSession);
   }
 
@@ -465,14 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
     panelChatRunning = false;
     if (panelChatTimeout) { clearTimeout(panelChatTimeout); panelChatTimeout = null; }
     stopSpeaking();
-    const btn = document.getElementById('panel-chat-btn');
-    if (btn) { btn.textContent = 'Start conversation'; btn.classList.remove('on'); }
   }
-
-  document.getElementById('panel-chat-btn').addEventListener('click', () => {
-    if (panelChatRunning) stopPanelChat();
-    else startPanelChat();
-  });
 
   // ==========================================
   // トースト通知
@@ -1699,6 +1691,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       if (done) return;
       done = true;
       clearTimeout(wd);
+      setSpeakingState(false);
       onEnd(spoke);
     };
     // 発話長に応じたウォッチドッグ(onendが来ない端末の保険)
@@ -1707,6 +1700,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     u.onerror = (e) => { lastBanterErr = 'tts:' + ((e && e.error) || 'err'); finish(false); };
 
     // iOS: cancel()直後のspeak()は無音になりがち。発話中のときだけcancelし、少し待ってから話す。
+    u.onstart = () => setSpeakingState(true);
     const go = () => { try { synth.resume(); synth.speak(u); } catch (e) { finish(false); } };
     try {
       if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(go, 120); }
@@ -1754,6 +1748,10 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   }
 
   // 取得済みの音声Blobを再生し、終了時に onEnd(spoke) を呼ぶ
+  function setSpeakingState(active) {
+    spiritCountBtn.classList.toggle('speaking', active);
+  }
+
   function playLine(blob, onEnd) {
     if (!blob) {
       onEnd(false);
@@ -1770,10 +1768,12 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       if (watchdog) clearTimeout(watchdog);
       audio.onended = audio.onerror = null;
       if (objUrl) URL.revokeObjectURL(objUrl);
+      setSpeakingState(false);
       onEnd(spoke);
     };
 
     objUrl = URL.createObjectURL(blob);
+    setSpeakingState(true);
     audio.onended = () => finish(true);
     audio.onerror = () => finish(false);
     watchdog = setTimeout(() => finish(true), 20000);
@@ -1798,6 +1798,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       banterAudio.removeAttribute('src');
     }
     if (speechSupported) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+    setSpeakingState(false);
   }
 
   // ==========================================
