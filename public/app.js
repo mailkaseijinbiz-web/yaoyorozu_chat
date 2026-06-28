@@ -116,12 +116,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // 言語設定(English基準＋日本語含む6言語)。AIの生成言語・On-device TTSの読み上げ言語に反映。
   const LANG_KEY = 'ar_agents_2_lang';
   const LANGS = [
-    { code: 'en', label: 'English',  bcp47: 'en-US' },
-    { code: 'ja', label: '日本語',    bcp47: 'ja-JP' },
-    { code: 'zh', label: '中文',      bcp47: 'zh-CN' },
-    { code: 'ko', label: '한국어',    bcp47: 'ko-KR' },
-    { code: 'es', label: 'Español',  bcp47: 'es-ES' },
-    { code: 'fr', label: 'Français',  bcp47: 'fr-FR' }
+    { code: 'en',    label: 'English',    bcp47: 'en-US'  },
+    { code: 'ja',    label: '日本語',      bcp47: 'ja-JP'  },
+    { code: 'zh',    label: '中文',        bcp47: 'zh-CN'  },
+    { code: 'ko',    label: '한국어',      bcp47: 'ko-KR'  },
+    { code: 'es',    label: 'Español',    bcp47: 'es-ES'  },
+    { code: 'fr',    label: 'Français',   bcp47: 'fr-FR'  },
+    { code: 'de',    label: 'Deutsch',    bcp47: 'de-DE'  },
+    { code: 'pt',    label: 'Português',  bcp47: 'pt-BR'  },
+    { code: 'it',    label: 'Italiano',   bcp47: 'it-IT'  },
+    { code: 'ru',    label: 'Русский',    bcp47: 'ru-RU'  },
+    { code: 'ar',    label: 'العربية',    bcp47: 'ar-SA'  },
+    { code: 'hi',    label: 'हिन्दी',      bcp47: 'hi-IN'  },
+    { code: 'th',    label: 'ไทย',        bcp47: 'th-TH'  },
+    { code: 'vi',    label: 'Tiếng Việt', bcp47: 'vi-VN'  },
+    { code: 'id',    label: 'Indonesia',  bcp47: 'id-ID'  },
+    { code: 'nl',    label: 'Nederlands', bcp47: 'nl-NL'  },
+    { code: 'tr',    label: 'Türkçe',     bcp47: 'tr-TR'  },
+    { code: 'pl',    label: 'Polski',     bcp47: 'pl-PL'  },
+    { code: 'sv',    label: 'Svenska',    bcp47: 'sv-SE'  },
+    { code: 'uk',    label: 'Українська', bcp47: 'uk-UA'  },
   ];
   let language = localStorage.getItem(LANG_KEY) || 'en';
   if (!LANGS.some(l => l.code === language)) language = 'en';
