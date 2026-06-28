@@ -81,6 +81,11 @@ html, body {
 
 #camera-overlay-canvas {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -56%);
+  width: min(72vw, 60vh);
+  height: min(72vw, 60vh);
   pointer-events: none;
 }
 

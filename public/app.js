@@ -725,10 +725,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function syncOverlayCanvas() {
     const rect = captureGuide.getBoundingClientRect();
-    overlayCanvas.width = rect.width;
-    overlayCanvas.height = rect.height;
-    overlayCanvas.style.left = rect.left + 'px';
-    overlayCanvas.style.top = rect.top + 'px';
+    overlayCanvas.width = Math.round(rect.width);
+    overlayCanvas.height = Math.round(rect.height);
+    // 位置はCSSで#capture-guideと同一ルール指定済み — JS側のpx指定は不要
   }
 
   function clearOverlay() {
@@ -912,6 +911,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isScanning || detectedTargets.length === 0) {
       clearOverlay();
       return;
+    }
+    // ビューポート変化(アドレスバー出現等)でガイド枠が動いた場合にキャンバスサイズを追従
+    const r = captureGuide.getBoundingClientRect();
+    const rw = Math.round(r.width), rh = Math.round(r.height);
+    if (overlayCanvas.width !== rw || overlayCanvas.height !== rh) {
+      overlayCanvas.width = rw;
+      overlayCanvas.height = rh;
     }
     drawRecognition(time);
     overlayRAF = requestAnimationFrame(overlayTick);
