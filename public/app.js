@@ -1301,10 +1301,9 @@ document.addEventListener('DOMContentLoaded', () => {
       loadingOverlay.classList.add('hidden');
       setupTargetListeners();
       modeToggle.classList.remove('hidden');
-      // スキャン後に勝手にTalkへ切り替えない。直前のタブ(uiMode)を維持する。
-      // Talk中に追加召喚した場合だけ会話を継続/再開する。
-      setUIMode(uiMode);
-      if (uiMode === 'banter') startBanter(newcomerName);
+      // コンパイル完了後は常にTalkへ自動切替して会話を開始
+      setUIMode('banter');
+      startBanter(newcomerName);
     } catch (err) {
       console.error('Compilation error:', err);
       isCompiling = false;
