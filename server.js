@@ -355,7 +355,7 @@ const DEMO_VESSELS = [
 let demoSegmentCount = 0;
 
 app.post('/api/segment-vessels', async (req, res) => {
-  const { image, language } = req.body;
+  const { image, language, modelPreset } = req.body;
   if (!image) {
     return res.status(400).json({ error: 'Image data is required' });
   }
@@ -367,7 +367,7 @@ app.post('/api/segment-vessels', async (req, res) => {
     return res.status(400).json({ error: 'Image data is empty or too small' });
   }
 
-  if (!hasApiKey) {
+  if (!hasApiKey && !hasCerebrasKey) {
     const demo = DEMO_VESSELS[demoSegmentCount];
     demoSegmentCount = (demoSegmentCount + 1) % DEMO_VESSELS.length;
     return res.json({
@@ -395,7 +395,8 @@ Output ONLY the following JSON structure (no preamble, no explanation, no code f
 }
 If there are no suitable objects, set "targets" to an empty array.${language && language !== 'en' ? `\nIMPORTANT: Write "name", "spiritName" and "personality" in ${langName(language)} (use that language's native script). Keep "voice" and "box" exactly as specified.` : ''}`;
 
-    const text = await callOpenRouter({
+    const text = await callLLM({
+      modelPreset,
       messages: [
         {
           role: 'user',

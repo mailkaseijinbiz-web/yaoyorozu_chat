@@ -846,7 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch('/api/segment-vessels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl, language })
+        body: JSON.stringify({ image: dataUrl, language, modelPreset })
       });
       const data = await response.json();
       // /api/segment-vessels にかかった時間を確定してデバッグ表示する
