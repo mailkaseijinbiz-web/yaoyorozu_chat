@@ -109,6 +109,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const SCAN_MODE_KEY = 'ar_agents_2_scan_mode';
   let scanMode = localStorage.getItem(SCAN_MODE_KEY) === 'auto' ? 'auto' : 'manual';
 
+  // 推論モデルプリセット: 'cerebras'(高速) / 'gemma4'(標準ルーティング)
+  const MODEL_PRESET_KEY = 'ar_agents_2_model';
+  let modelPreset = localStorage.getItem(MODEL_PRESET_KEY) === 'gemma4' ? 'gemma4' : 'cerebras';
+
   // 言語設定(English基準＋日本語含む6言語)。AIの生成言語・On-device TTSの読み上げ言語に反映。
   const LANG_KEY = 'ar_agents_2_lang';
   const LANGS = [
@@ -1544,7 +1548,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function openSettings() { settingsPanel.classList.add('open'); updateTtsUI(); updateScanModeUI(); }
+  // ===== 設定パネル: モデルプリセットの切替 =====
+  function updateModelUI() {
+    const cBtn = document.getElementById('model-cerebras');
+    const gBtn = document.getElementById('model-gemma4');
+    const hint = document.getElementById('model-hint');
+    if (cBtn) cBtn.classList.toggle('active', modelPreset === 'cerebras');
+    if (gBtn) gBtn.classList.toggle('active', modelPreset === 'gemma4');
+    if (hint) hint.textContent = modelPreset === 'cerebras'
+      ? '⚡ Cerebras: ultra-fast inference (Gemma 3 27B).'
+      : 'Gemma 4: standard OpenRouter routing.';
+  }
+  function setModelPreset(p) {
+    const next = p === 'gemma4' ? 'gemma4' : 'cerebras';
+    if (next === modelPreset) return;
+    modelPreset = next;
+    localStorage.setItem(MODEL_PRESET_KEY, next);
+    updateModelUI();
+  }
+
+  function openSettings() { settingsPanel.classList.add('open'); updateTtsUI(); updateScanModeUI(); updateModelUI(); }
   function closeSettings() { settingsPanel.classList.remove('open'); }
   settingsBtn.addEventListener('click', openSettings);
   document.getElementById('settings-backdrop').addEventListener('click', closeSettings);
@@ -1553,8 +1576,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tts-standalone').addEventListener('click', () => setTtsEngine('standalone'));
   document.getElementById('scan-auto').addEventListener('click', () => setScanMode('auto'));
   document.getElementById('scan-manual').addEventListener('click', () => setScanMode('manual'));
+  document.getElementById('model-cerebras').addEventListener('click', () => setModelPreset('cerebras'));
+  document.getElementById('model-gemma4').addEventListener('click', () => setModelPreset('gemma4'));
   updateTtsUI();
   updateScanModeUI();
+  updateModelUI();
 
   // ===== Standalone TTS (Web Speech API) =====
   let standaloneVoices = [];
@@ -1742,7 +1768,8 @@ document.addEventListener('DOMContentLoaded', () => {
       newcomer: newcomerToAnnounce,
       situation: currentSituation,
       forceSpeaker,
-      language
+      language,
+      modelPreset
     });
     newcomerToAnnounce = null;
 

@@ -255,7 +255,26 @@ if (!hasApiKey) {
 
 // OpenRouterのchat completionsを呼び、本文テキストを返す。
 // Gemmaはレスポンススキーマ非対応のため、JSON整形はプロンプト指示＋parseJSONSafeで担保する。
-async function callOpenRouter({ messages, temperature }) {
+// モデルプリセット定義
+const MODEL_PRESETS = {
+  cerebras: {
+    model: 'google/gemma-3-27b-it',
+    providers: ['Cerebras'],
+    allowFallbacks: true
+  },
+  gemma4: {
+    model: 'google/gemma-3-27b-it',
+    providers: [],          // Cerebras縛りなし — OpenRouter標準ルーティング
+    allowFallbacks: true
+  }
+};
+
+async function callOpenRouter({ messages, temperature, modelPreset }) {
+  const preset = MODEL_PRESETS[modelPreset] || MODEL_PRESETS.cerebras;
+  const model = preset.model;
+  const providers = preset.providers.length ? preset.providers : OPENROUTER_PROVIDERS;
+  const allowFallbacks = preset.allowFallbacks;
+
   const response = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers: {
@@ -265,11 +284,10 @@ async function callOpenRouter({ messages, temperature }) {
       'X-Title': 'Yaorozu Chat'
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model,
       messages,
       ...(temperature != null ? { temperature } : {}),
-      // 推論プロバイダのルーティング(Cerebras優先)
-      ...(OPENROUTER_PROVIDERS.length ? { provider: { order: OPENROUTER_PROVIDERS, allow_fallbacks: OPENROUTER_ALLOW_FALLBACKS } } : {})
+      ...(providers.length ? { provider: { order: providers, allow_fallbacks: allowFallbacks } } : {})
     })
   });
 
@@ -284,7 +302,7 @@ async function callOpenRouter({ messages, temperature }) {
     throw new Error(`OpenRouter returned no text content: ${JSON.stringify(data)}`);
   }
   // 実際に推論を担当したプロバイダをログ(Cerebrasが使われたか確認できる)
-  if (data && data.provider) pushLog(`[LLM ${ts()}] ${OPENROUTER_MODEL} via ${data.provider}`);
+  if (data && data.provider) pushLog(`[LLM ${ts()}] ${model} via ${data.provider}`);
   return text;
 }
 
@@ -459,7 +477,7 @@ Rules:
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { spirits, history, memory, newcomer, situation, forceSpeaker, language } = req.body;
+  const { spirits, history, memory, newcomer, situation, forceSpeaker, language, modelPreset } = req.body;
 
   if (!spirits || !Array.isArray(spirits) || spirits.length < 1) {
     return res.status(400).json({ error: 'At least 1 spirit is required' });
@@ -542,6 +560,7 @@ app.post('/api/banter', async (req, res) => {
 
     const text = await callOpenRouter({
       temperature: 1.0,
+      modelPreset,
       messages: [
         { role: 'user', content: systemPrompt + '\n\n' + conversation + langInstruction + forceInstruction + '\n\n' + jsonSpec }
       ]
