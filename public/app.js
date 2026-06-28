@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== チューニング用定数 =====
   const SPIRIT_STORAGE_KEY = 'ar_agents_2_spirits';
   const MEMORY_STORAGE_KEY  = 'ar_agents_2_memory';
-  const GAZE_DURATION = 2000;        // 凝視で注入完了までの時間(ms)
+  const GAZE_DURATION = 0;           // 0=タップ即注入
   const SCAN_INTERVAL = 700;         // AIスキャン(物体検出)の間隔(ms)
   const TURN_GAP_MS = 250;           // セリフ読み上げ後、次のターンまでの間(ms)
   const COLORS = ['#00e5ff', '#ff5252', '#ffd740', '#69f0ae', '#e040fb', '#ff9100'];
@@ -138,7 +138,11 @@ document.addEventListener('DOMContentLoaded', () => {
     { code: 'sv',    label: 'Svenska',    bcp47: 'sv-SE'  },
     { code: 'uk',    label: 'Українська', bcp47: 'uk-UA'  },
   ];
-  let language = localStorage.getItem(LANG_KEY) || 'en';
+  function detectOsLanguage() {
+    const nav = (navigator.language || navigator.userLanguage || 'en').split('-')[0].toLowerCase();
+    return (LANGS.find(l => l.code === nav) || LANGS[0]).code;
+  }
+  let language = localStorage.getItem(LANG_KEY) || detectOsLanguage();
   if (!LANGS.some(l => l.code === language)) language = 'en';
   function langBcp47() { const l = LANGS.find(x => x.code === language); return l ? l.bcp47 : 'en-US'; }
 
@@ -955,7 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.clearRect(0, 0, w, h);
 
     const progress = gazeStartTime !== null
-      ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 0;
+      ? (GAZE_DURATION > 0 ? Math.min(1, (Date.now() - gazeStartTime) / GAZE_DURATION) : 1) : 0;
     const pulse = 0.5 + 0.5 * Math.sin(time / 300);
 
     for (const { target, color } of detectedTargets) {
@@ -1050,7 +1054,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const elapsed = Date.now() - gazeStartTime;
       // 進行の見た目はoverlayTick(rAF)側がgazeStartTimeから描画する
 
-      if (elapsed >= GAZE_DURATION) {
+      if (GAZE_DURATION === 0 || elapsed >= GAZE_DURATION) {
         clearInterval(gazeInterval);
         gazeInterval = null;
         gazeStartTime = null;
