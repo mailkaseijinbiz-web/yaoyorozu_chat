@@ -1574,7 +1574,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cBtn) cBtn.classList.toggle('active', modelPreset === 'cerebras');
     if (gBtn) gBtn.classList.toggle('active', modelPreset === 'gemma4');
     if (hint) hint.textContent = modelPreset === 'cerebras'
-      ? '⚡ Cerebras: ultra-fast inference (Gemma 3 27B).'
+      ? '⚡ Cerebras: ultra-fast inference (Gemma 4 31B).'
       : 'OpenRouter: standard routing (Gemma 4 31B).';
   }
   function setModelPreset(p) {
