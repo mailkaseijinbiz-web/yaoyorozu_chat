@@ -263,7 +263,7 @@ const MODEL_PRESETS = {
     allowFallbacks: true
   },
   gemma4: {
-    model: 'google/gemma-3-27b-it',
+    model: 'google/gemma-4-31b-it',
     providers: [],          // Cerebras縛りなし — OpenRouter標準ルーティング
     allowFallbacks: true
   }
