@@ -238,7 +238,7 @@ function langName(code) { return LANG_NAMES[code] || 'English'; }
 // Cerebras 直接API
 // ==========================================
 const CEREBRAS_API_URL = 'https://api.cerebras.ai/v1/chat/completions';
-const CEREBRAS_MODEL = 'gemma4-31b';
+const CEREBRAS_MODEL = 'gemma-4-31b';
 const hasCerebrasKey = !!process.env.CEREBRAS_API_KEY;
 
 // OpenRouter (OpenAI互換API) — フォールバック / OpenRouterプリセット用
