@@ -1192,7 +1192,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // MindARコンパイル WebWorker
   // ==========================================
 
-  const USE_MIND_WORKER = typeof OffscreenCanvas !== 'undefined' && typeof Worker !== 'undefined';
+  const USE_MIND_WORKER = false; // MindARはDOM依存が多くWorker化が困難なため無効
 
   const MIND_AR_WORKER_SRC = `
 self.window = self;
