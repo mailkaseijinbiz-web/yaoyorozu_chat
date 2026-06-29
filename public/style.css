@@ -778,6 +778,12 @@ html, body {
   }
 }
 
-/* ===== PC: スマホフレームを中央表示 ===== */
-/* PC: 全画面表示 (スマホと同じ挙動) */
+/* ===== PC: スキャンガイドを固定サイズに ===== */
+@media (min-width: 769px) {
+  #camera-overlay-canvas,
+  #capture-guide {
+    width: 280px;
+    height: 280px;
+  }
+}
 
