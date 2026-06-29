@@ -108,6 +108,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastBanterMs = null;   // 直近の /api/banter にかかった時間(ms)。
   let banterReqStart = null; // banterリクエスト中の開始時刻。通信中はライブで経過を表示。
   let lastBanterAt = 0;      // lastBanterMsを更新した時刻
+  const scanSamples = [];    // 直近の画像認識レイテンシ記録 (移動平均用)
+  const banterSamples = [];  // 直近のBanterレイテンシ記録
+  const MAX_SAMPLES = 20;
+  function pushSample(arr, val) { arr.push(val); if (arr.length > MAX_SAMPLES) arr.shift(); }
+  function sampleAvg(arr) { return arr.length < 2 ? null : arr.reduce((a,b)=>a+b,0)/arr.length; }
   // スキャン方式: 'auto'=一定間隔で自動 / 'manual'=画面タップで1回ずつ。設定で切替・永続化。
   // 既定は manual(画面タップでスキャン開始)。設定で auto に切替可能。
 
@@ -915,6 +920,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // /api/segment-vessels にかかった時間を確定してデバッグ表示する
       lastScanMs = Math.round(performance.now() - scanReqStart);
       lastScanAt = performance.now();
+      pushSample(scanSamples, lastScanMs);
 
       if (!isScanning || scanSessionId !== session) return;
 
@@ -1789,6 +1795,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     scanSessionId++; // 進行中スキャンを無効化
     isRequestPending = false;
     lastScanMs = null; scanReqStart = null; lastBanterMs = null; banterReqStart = null;
+    scanSamples.length = 0; banterSamples.length = 0;
     updateModelUI();
   }
 
@@ -2059,6 +2066,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     const settle = () => {
       lastBanterMs = Math.round(performance.now() - t0);
       lastBanterAt = performance.now();
+      pushSample(banterSamples, lastBanterMs);
       if (banterReqStart === t0) banterReqStart = null; // 自分が最新なら解除(先読み重複対策)
     };
     return fetch('/api/banter', {
@@ -2543,6 +2551,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     document.getElementById('banter-pause-overlay')?.classList.add('hidden');
     lastBanterErr = '—';
     lastScanMs = null; scanReqStart = null; lastBanterMs = null; banterReqStart = null;
+    scanSamples.length = 0; banterSamples.length = 0;
     if (compiledMindUrl) { URL.revokeObjectURL(compiledMindUrl); compiledMindUrl = null; }
     compiledMindBuffer = null;
     compiledSpiritCount = 0;
@@ -2606,15 +2615,30 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     // 画像認識とBanterの両方を常時2行表示
     debugEl.classList.add('big');
 
+    function makeDeltaText(curMs, samples) {
+      const avg = sampleAvg(samples);
+      if (avg == null || curMs == null) return { text: '', color: '' };
+      const pct = Math.round((avg - curMs) / avg * 100);
+      if (Math.abs(pct) < 3) return { text: '', color: '' };
+      return pct > 0
+        ? { text: `↑${pct}%`, color: '#69f0ae' }
+        : { text: `↓${Math.abs(pct)}%`, color: '#ff5252' };
+    }
+
     const scanRow = document.createElement('div'); scanRow.className = 'dbg-row';
     const scanLabel = document.createElement('span'); scanLabel.className = 'dbg-label'; scanLabel.textContent = 'Image Recognition:';
     const scanVal = document.createElement('span'); scanVal.className = 'dbg-val';
-    scanRow.appendChild(scanLabel); scanRow.appendChild(scanVal); debugEl.appendChild(scanRow);
+    const scanDelta = document.createElement('span'); scanDelta.className = 'dbg-delta';
+    scanRow.appendChild(scanLabel); scanRow.appendChild(scanVal); scanRow.appendChild(scanDelta); debugEl.appendChild(scanRow);
 
     const banterRow = document.createElement('div'); banterRow.className = 'dbg-row';
     const banterLabel = document.createElement('span'); banterLabel.className = 'dbg-label'; banterLabel.textContent = 'Banter:';
     const banterVal = document.createElement('span'); banterVal.className = 'dbg-val';
-    banterRow.appendChild(banterLabel); banterRow.appendChild(banterVal); debugEl.appendChild(banterRow);
+    const banterDelta = document.createElement('span'); banterDelta.className = 'dbg-delta';
+    banterRow.appendChild(banterLabel); banterRow.appendChild(banterVal); banterRow.appendChild(banterDelta); debugEl.appendChild(banterRow);
+
+    // avg行
+    const avgRow = document.createElement('div'); avgRow.className = 'dbg-avg-row'; debugEl.appendChild(avgRow);
 
     const tick = () => {
       const scanMs = scanReqStart != null ? performance.now() - scanReqStart : lastScanMs;
@@ -2624,6 +2648,16 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       // 通信中は強調
       scanRow.style.opacity = scanReqStart != null ? '1' : '0.65';
       banterRow.style.opacity = banterReqStart != null ? '1' : '0.65';
+      // delta表示 (通信完了値に対してのみ)
+      const sd = makeDeltaText(lastScanMs, scanSamples);
+      scanDelta.textContent = sd.text; scanDelta.style.color = sd.color;
+      const bd = makeDeltaText(lastBanterMs, banterSamples);
+      banterDelta.textContent = bd.text; banterDelta.style.color = bd.color;
+      // avg行
+      const sAvg = sampleAvg(scanSamples), bAvg = sampleAvg(banterSamples);
+      avgRow.textContent = (sAvg != null || bAvg != null)
+        ? 'avg: ' + (sAvg != null ? Math.round(sAvg) + ' / ' : '— / ') + (bAvg != null ? Math.round(bAvg) + ' ms' : '—')
+        : '';
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

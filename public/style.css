@@ -58,6 +58,20 @@ html, body {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+#debug-overlay .dbg-delta {
+  min-width: 44px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+#debug-overlay .dbg-avg-row {
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+  text-align: right;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
 /* bigクラスは後方互換のため維持 */
 #debug-overlay.big {
   font-size: 13px;
