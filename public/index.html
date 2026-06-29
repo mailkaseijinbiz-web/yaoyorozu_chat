@@ -121,14 +121,14 @@
         </div>
         <div class="settings-hint" id="settings-lang-hint">Spirits' names and speech are generated in this language.</div>
 
-        <div class="settings-row">
+        <div class="settings-row" style="display:none">
           <div class="settings-label" id="settings-tts-label">Voice (TTS)</div>
           <div class="settings-seg">
             <button id="tts-elevenlabs" class="seg-btn active">ElevenLabs</button>
             <button id="tts-standalone" class="seg-btn">On-device</button>
           </div>
         </div>
-        <div class="settings-hint" id="tts-hint">High-quality cloud voices (needs ElevenLabs API key).</div>
+        <div class="settings-hint" id="tts-hint" style="display:none">High-quality cloud voices (needs ElevenLabs API key).</div>
 
         <div class="settings-row">
           <div class="settings-label" id="settings-model-label">Model</div>
@@ -139,23 +139,23 @@
         </div>
         <div class="settings-hint" id="model-hint">⚡ Cerebras: ultra-fast inference (Gemma 4 31B). OpenRouter: standard routing (Gemma 4 31B).</div>
 
-        <div class="settings-row">
+        <div class="settings-row" style="display:none">
           <div class="settings-label">Model tabs (top)</div>
           <div class="settings-seg">
             <button id="banner-vis-show" class="seg-btn active">Show</button>
             <button id="banner-vis-hide" class="seg-btn">Hide</button>
           </div>
         </div>
-        <div class="settings-hint">Top banner for switching Cerebras / OpenRouter.</div>
+        <div class="settings-hint" style="display:none">Top banner for switching Cerebras / OpenRouter.</div>
 
-        <div class="settings-row">
+        <div class="settings-row" style="display:none">
           <div class="settings-label">Debug log</div>
           <div class="settings-seg">
             <button id="log-vis-show" class="seg-btn active">Show</button>
             <button id="log-vis-hide" class="seg-btn">Hide</button>
           </div>
         </div>
-        <div class="settings-hint">On-screen latency / status overlay.</div>
+        <div class="settings-hint" style="display:none">On-screen latency / status overlay.</div>
 
         <div class="settings-row settings-row--column">
           <div class="settings-label" id="settings-banter-label">Banter style</div>
