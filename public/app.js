@@ -1663,6 +1663,12 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   const BANTER_STYLE_KEY = 'ar_agents_2_banter_style';
   let banterStyleInstruction = localStorage.getItem(BANTER_STYLE_KEY) || '';
 
+  // 上部UI(モデルバナー/デバッグログ)の表示設定。デフォルトは表示。
+  const BANNER_VIS_KEY = 'ar_agents_2_show_banner';
+  const LOG_VIS_KEY = 'ar_agents_2_show_log';
+  let showBanner = localStorage.getItem(BANNER_VIS_KEY) !== 'false';
+  let showLog = localStorage.getItem(LOG_VIS_KEY) !== 'false';
+
   // TTSエンジン設定 ('elevenlabs' | 'standalone')。standaloneはブラウザのWeb Speech API。
   const TTS_STORAGE_KEY = 'ar_agents_2_tts_engine';
   const speechSupported = typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance !== 'undefined';
@@ -1798,6 +1804,40 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       localStorage.setItem(BANTER_STYLE_KEY, banterStyleInstruction);
     });
   }
+
+  // ===== 設定パネル: 上部UI(モデルバナー / デバッグログ)の表示切替 =====
+  function applyDisplayPrefs() {
+    const banner = document.getElementById('model-banner');
+    const dbg = document.getElementById('debug-overlay');
+    if (banner) banner.style.display = showBanner ? '' : 'none';
+    if (dbg) dbg.style.display = showLog ? '' : 'none';
+    const bs = document.getElementById('banner-vis-show');
+    const bh = document.getElementById('banner-vis-hide');
+    if (bs) bs.classList.toggle('active', showBanner);
+    if (bh) bh.classList.toggle('active', !showBanner);
+    const ls = document.getElementById('log-vis-show');
+    const lh = document.getElementById('log-vis-hide');
+    if (ls) ls.classList.toggle('active', showLog);
+    if (lh) lh.classList.toggle('active', !showLog);
+  }
+  function setBannerVisible(v) {
+    showBanner = v;
+    localStorage.setItem(BANNER_VIS_KEY, v ? 'true' : 'false');
+    applyDisplayPrefs();
+  }
+  function setLogVisible(v) {
+    showLog = v;
+    localStorage.setItem(LOG_VIS_KEY, v ? 'true' : 'false');
+    applyDisplayPrefs();
+  }
+  [['banner-vis-show', () => setBannerVisible(true)],
+   ['banner-vis-hide', () => setBannerVisible(false)],
+   ['log-vis-show', () => setLogVisible(true)],
+   ['log-vis-hide', () => setLogVisible(false)]].forEach(([id, fn]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  });
+  applyDisplayPrefs();
 
   // ===== 設定パネル: モデルプリセットの切替 =====
   function updateModelUI() {
