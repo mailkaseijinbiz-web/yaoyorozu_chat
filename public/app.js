@@ -2614,49 +2614,23 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     // 画像認識とBanterの両方を常時2行表示
     debugEl.classList.add('big');
 
-    function makeDeltaText(curMs, samples) {
-      const avg = sampleAvg(samples);
-      if (avg == null || curMs == null) return { text: '', color: '' };
-      const pct = Math.round((avg - curMs) / avg * 100);
-      if (Math.abs(pct) < 3) return { text: '', color: '' };
-      return pct > 0
-        ? { text: `↑${pct}%`, color: '#69f0ae' }
-        : { text: `↓${Math.abs(pct)}%`, color: '#ff5252' };
-    }
-
     const scanRow = document.createElement('div'); scanRow.className = 'dbg-row';
     const scanLabel = document.createElement('span'); scanLabel.className = 'dbg-label'; scanLabel.textContent = 'Image Recognition:';
     const scanVal = document.createElement('span'); scanVal.className = 'dbg-val';
-    const scanDelta = document.createElement('span'); scanDelta.className = 'dbg-delta';
-    scanRow.appendChild(scanLabel); scanRow.appendChild(scanVal); scanRow.appendChild(scanDelta); debugEl.appendChild(scanRow);
+    scanRow.appendChild(scanLabel); scanRow.appendChild(scanVal); debugEl.appendChild(scanRow);
 
     const banterRow = document.createElement('div'); banterRow.className = 'dbg-row';
     const banterLabel = document.createElement('span'); banterLabel.className = 'dbg-label'; banterLabel.textContent = 'Banter:';
     const banterVal = document.createElement('span'); banterVal.className = 'dbg-val';
-    const banterDelta = document.createElement('span'); banterDelta.className = 'dbg-delta';
-    banterRow.appendChild(banterLabel); banterRow.appendChild(banterVal); banterRow.appendChild(banterDelta); debugEl.appendChild(banterRow);
-
-    // avg行
-    const avgRow = document.createElement('div'); avgRow.className = 'dbg-avg-row'; debugEl.appendChild(avgRow);
+    banterRow.appendChild(banterLabel); banterRow.appendChild(banterVal); debugEl.appendChild(banterRow);
 
     const tick = () => {
       const scanMs = scanReqStart != null ? performance.now() - scanReqStart : lastScanMs;
       const bMs = banterReqStart != null ? performance.now() - banterReqStart : lastBanterMs;
       scanVal.textContent = scanMs != null ? Math.round(scanMs) + ' ms' : '—';
       banterVal.textContent = bMs != null ? Math.round(bMs) + ' ms' : '—';
-      // 通信中は強調
       scanRow.style.opacity = scanReqStart != null ? '1' : '0.65';
       banterRow.style.opacity = banterReqStart != null ? '1' : '0.65';
-      // delta表示 (通信完了値に対してのみ)
-      const sd = makeDeltaText(lastScanMs, scanSamples);
-      scanDelta.textContent = sd.text; scanDelta.style.color = sd.color;
-      const bd = makeDeltaText(lastBanterMs, banterSamples);
-      banterDelta.textContent = bd.text; banterDelta.style.color = bd.color;
-      // avg行
-      const sAvg = sampleAvg(scanSamples), bAvg = sampleAvg(banterSamples);
-      avgRow.textContent = (sAvg != null || bAvg != null)
-        ? 'avg: ' + (sAvg != null ? Math.round(sAvg) + ' / ' : '— / ') + (bAvg != null ? Math.round(bAvg) + ' ms' : '—')
-        : '';
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
