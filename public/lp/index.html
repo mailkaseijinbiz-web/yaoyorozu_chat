@@ -146,8 +146,15 @@
     }
     .phone-screen {
       position: absolute; inset: 0;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 14px;
+      background: #0d1222 url('/lp/images/hero-mug.webp') center 52% / cover no-repeat;
+      display: flex; flex-direction: column; align-items: center;
+      padding-top: 46px;
+    }
+    /* 写真上端をスクリーンになじませる薄いグラデ */
+    .phone-screen::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(8,10,20,.45) 0%, rgba(8,10,20,0) 32%);
+      pointer-events: none;
     }
     .phone-bubble {
       background: #fff; border: 3px solid #111;
@@ -155,7 +162,8 @@
       font-family: 'Bangers', sans-serif;
       font-size: 15px; line-height: 1.2;
       max-width: 200px; text-align: center;
-      position: relative; color: #111;
+      position: relative; z-index: 2; color: #111;
+      box-shadow: 0 6px 18px rgba(0,0,0,.35);
       animation: bobble 3s ease-in-out infinite;
     }
     .phone-bubble.b1 { border-color: #ffd740; animation-delay: 0s; }
@@ -598,9 +606,7 @@
     <div class="phone-frame">
       <div class="phone-notch"></div>
       <div class="phone-screen">
-        <div class="phone-bubble b1">GOOD HEAVENS!<br>I AM THE SPIRIT OF TIME!</div>
-        <div class="phone-ring"></div>
-        <div class="phone-bubble b2">YEAH, YEAH.<br>I'M THE SPIRIT OF DRINKS.</div>
+        <div class="phone-bubble b1">YOU LOOK TIRED,<br>DRINK ME!</div>
       </div>
       <div class="phone-label">AR · Speech Bubbles · Live Voice</div>
     </div>
