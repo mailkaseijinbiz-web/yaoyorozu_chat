@@ -1838,8 +1838,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     u.onstart = () => { setSpeakingState(true); startSynthKeepAlive(); };
     u.onend = () => finish(true);
     u.onerror = (e) => {
-      // 'interrupted' は stopSpeaking() による意図的なキャンセル。エラー扱いしない。
-      if (e && e.error === 'interrupted') { finish(false); return; }
+      // 'interrupted'/'canceled' は cancel() による意図的なキャンセル。エラー扱いしない。
+      if (e && (e.error === 'interrupted' || e.error === 'canceled')) { finish(false); return; }
       lastBanterErr = 'tts:' + ((e && e.error) || 'err');
       finish(false);
     };
@@ -1849,8 +1849,17 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       catch (e) { finish(false); }
     };
     try {
-      if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(go, 150); }
-      else go();
+      if (synth.speaking || synth.pending) {
+        if (isIOS) {
+          // iOS: cancel() はセッションを破棄するため呼ばない。前の発話が終わり次第、次ターンで再開。
+          finish(false);
+          return;
+        }
+        synth.cancel();
+        setTimeout(go, 150);
+      } else {
+        go();
+      }
     } catch (e) { finish(false); }
   }
 
