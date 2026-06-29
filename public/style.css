@@ -1,6 +1,6 @@
 :root {
   --edge: 12px;          /* 全辺共通の余白 */
-  --banner-h: 50px;      /* ピル型バナーの占有高さ (top:8px + pill~34px + gap8px) */
+  --banner-h: 36px;      /* 全幅バナーの高さ (padding 5*2 + line-height ~26) */
   --top-ui: calc(var(--banner-h) + var(--edge));   /* バナー下端から --edge だけ空けた位置 */
   --bottom-ui: calc(var(--edge) + env(safe-area-inset-bottom, 0px)); /* ホームバー考慮 */
 }
@@ -101,37 +101,46 @@ html, body {
   pointer-events: none;
 }
 
-/* ===== モデルバナー: セグメントコントロール ===== */
+/* ===== モデルバナー: 全幅帯 + 中央セグメントコントロール ===== */
 #model-banner {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 26;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 5px 12px;
+  background: rgba(11, 15, 25, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: auto;
+}
+/* 内側のピル */
+#model-banner-pill {
   display: inline-flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 30px;
   padding: 3px;
   gap: 2px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  pointer-events: auto;
-  white-space: nowrap;
 }
 .banner-seg-btn {
-  padding: 5px 16px;
+  padding: 4px 15px;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.3px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.4);
   border-radius: 25px;
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
 }
 .banner-seg-btn.active {
   color: #fff;
@@ -140,7 +149,7 @@ html, body {
   background: #ff6a00;
 }
 #banner-openrouter.active {
-  background: rgba(255, 255, 255, 0.15);
+  background: #1a6ed8;
 }
 
 #camera-overlay-canvas {
