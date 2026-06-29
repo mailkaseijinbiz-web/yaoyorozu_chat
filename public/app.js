@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function getMindCache(key) {
     return new Promise((resolve) => {
       try {
-        const req = indexedDB.open('yaorozu_mind', 1);
+        const req = indexedDB.open('yaoyorozu_mind', 1);
         req.onupgradeneeded = (e) => e.target.result.createObjectStore('cache');
         req.onsuccess = (e) => {
           try {
@@ -371,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function setMindCache(key, buffer) {
     try {
-      const req = indexedDB.open('yaorozu_mind', 1);
+      const req = indexedDB.open('yaoyorozu_mind', 1);
       req.onupgradeneeded = (e) => e.target.result.createObjectStore('cache');
       req.onsuccess = (e) => {
         try { e.target.result.transaction('cache', 'readwrite').objectStore('cache').put({ key, buffer }, 'v1'); } catch (_) {}
@@ -380,12 +380,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function clearMindCache() {
     try {
-      const req = indexedDB.open('yaorozu_mind', 1);
+      const req = indexedDB.open('yaoyorozu_mind', 1);
       req.onsuccess = (e) => {
         try { e.target.result.transaction('cache', 'readwrite').objectStore('cache').clear(); } catch (_) {}
       };
     } catch (_) {}
   }
+  // 旧名のコンパイルキャッシュDBを掃除 (yaorozu_mind → yaoyorozu_mind へ改名済み)
+  try { indexedDB.deleteDatabase('yaorozu_mind'); } catch (_) {}
 
   function updateSpiritCountBtn() {
     spiritCountNum.textContent = spirits.length;
