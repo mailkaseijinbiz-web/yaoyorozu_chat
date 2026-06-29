@@ -1743,11 +1743,10 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     if (hint) hint.textContent = modelPreset === 'cerebras'
       ? s('modelHintCerebras')
       : s('modelHintOpenRouter');
-    const banner = document.getElementById('model-banner');
-    if (banner) {
-      banner.textContent = modelPreset === 'cerebras' ? s('modelCerebras') : s('modelOpenRouter');
-      banner.className = modelPreset === 'cerebras' ? 'cerebras' : 'openrouter';
-    }
+    const bCBtn = document.getElementById('banner-cerebras');
+    const bGBtn = document.getElementById('banner-openrouter');
+    if (bCBtn) bCBtn.classList.toggle('active', modelPreset === 'cerebras');
+    if (bGBtn) bGBtn.classList.toggle('active', modelPreset === 'gemma4');
   }
 
   function applyUIStrings() {
@@ -1802,6 +1801,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   document.getElementById('tts-standalone').addEventListener('click', () => setTtsEngine('standalone'));
   document.getElementById('model-cerebras').addEventListener('click', () => setModelPreset('cerebras'));
   document.getElementById('model-gemma4').addEventListener('click', () => setModelPreset('gemma4'));
+  document.getElementById('banner-cerebras').addEventListener('click', () => setModelPreset('cerebras'));
+  document.getElementById('banner-openrouter').addEventListener('click', () => setModelPreset('gemma4'));
   updateTtsUI();
   updateModelUI();
 
