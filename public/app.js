@@ -1377,6 +1377,9 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     isCompiling = true;
     stopScanning();
     stopBanterLoop();
+    // iOS: stopBanterLoop→stopSpeaking→stopSynthKeepAliveでセッション維持が止まる。
+    // ARコンパイル中もセッションを維持するため即座に再開する。
+    if (isIOS && speechSupported && audioUnlocked) startSynthKeepAlive();
 
     // コンパイル中にbanter先読みを並行実行（AR表示直後に即セリフを出すため）
     preFetchedBanterTurn = null;
@@ -1596,6 +1599,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       try {
         const warm = new SpeechSynthesisUtterance(' ');
         warm.volume = 0.01;
+        // iOS: warm-up開始時からkeepAliveを開始してARコンパイル中もセッションを維持する
+        warm.onstart = () => { if (isIOS) startSynthKeepAlive(); };
         window.speechSynthesis.resume();
         window.speechSynthesis.speak(warm);
       } catch (e) {}
@@ -1826,17 +1831,21 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     if (v) u.voice = v;
 
     let done = false;
+    let wd = null;
     const finish = (spoke) => {
       if (done) return;
       done = true;
-      clearTimeout(wd);
+      if (wd) clearTimeout(wd);
       stopSynthKeepAlive();
       setSpeakingState(false);
       onEnd(spoke);
     };
-    const wd = setTimeout(() => finish(true), Math.min(20000, 1500 + text.length * 110));
     u.onstart = () => { setSpeakingState(true); startSynthKeepAlive(); };
-    u.onend = () => finish(true);
+    u.onend = () => {
+      // iOS: 発話終了後も pause() でセッションを維持する
+      if (isIOS) { try { synth.pause(); } catch (e2) {} }
+      finish(true);
+    };
     u.onerror = (e) => {
       // 'interrupted'/'canceled' は cancel() による意図的なキャンセル。エラー扱いしない。
       if (e && (e.error === 'interrupted' || e.error === 'canceled')) { finish(false); return; }
@@ -1844,15 +1853,27 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       finish(false);
     };
 
+    // watchdog は speak() を実際に呼んでから起動する（ポーリング待機時間を含めないため）
     const go = () => {
+      wd = setTimeout(() => finish(true), Math.min(20000, 1500 + text.length * 110));
       try { synth.resume(); synth.speak(u); }
       catch (e) { finish(false); }
     };
     try {
       if (synth.speaking || synth.pending) {
         if (isIOS) {
-          // iOS: cancel() はセッションを破棄するため呼ばない。前の発話が終わり次第、次ターンで再開。
-          finish(false);
+          // iOS: cancel() はセッションを破棄するため呼ばない。
+          // 前の発話が自然に終わるまでポーリングして待ち、終了後に開始する。
+          let polls = 0;
+          const waitAndGo = () => {
+            if (done) return;
+            if ((synth.speaking || synth.pending) && polls++ < 25) {
+              setTimeout(waitAndGo, 200);
+            } else {
+              go(); // 5秒待っても終わらなければ強制開始（queued後にresumeで再生）
+            }
+          };
+          setTimeout(waitAndGo, 200);
           return;
         }
         synth.cancel();
@@ -1952,7 +1973,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       banterAudio.pause();
       banterAudio.removeAttribute('src');
     }
-    // iOS: cancel() はオーディオセッションを破棄する → 以降の speak() が not-allowed になる
+    // iOS: cancel() はオーディオセッションを破棄するためスキップ。
+    // 前の発話は自然に終わるか、speakStandalone のポーリングが完了を待つ。
     if (speechSupported && !isIOS) { try { window.speechSynthesis.cancel(); } catch (e) {} }
     stopSynthKeepAlive();
     setSpeakingState(false);
