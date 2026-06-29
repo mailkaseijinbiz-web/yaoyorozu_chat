@@ -546,6 +546,19 @@ document.addEventListener('DOMContentLoaded', () => {
         video: { facingMode: 'environment' }
       });
       videoElement.srcObject = mediaStream;
+      // MindARが内部でgetUserMedia()を呼ぶたびに許可ダイアログが出るのを防ぐ。
+      // 既存のstreamをそのまま返すことでOS側への新規リクエストをスキップする。
+      if (!navigator.mediaDevices._gumPatched) {
+        const _orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = async (constraints) => {
+          if (mediaStream && mediaStream.active && constraints && constraints.video) {
+            return mediaStream;
+          }
+          return _orig(constraints);
+        };
+        navigator.mediaDevices._gumPatched = true;
+        navigator.mediaDevices._gumOrig = _orig;
+      }
       return true;
     } catch (err) {
       console.error('Camera error:', err);
@@ -556,11 +569,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopCamera() {
     // トラックは停止しない（再開時にiOSで許可ダイアログが出るため）
-    // video要素からだけ切り離す。resetTime以外では実際のトラックを保持し続ける。
+    // video要素からだけ切り離す。
     videoElement.srcObject = null;
   }
 
   function releaseCamera() {
+    // getUserMediaパッチを元に戻す
+    if (navigator.mediaDevices._gumPatched && navigator.mediaDevices._gumOrig) {
+      navigator.mediaDevices.getUserMedia = navigator.mediaDevices._gumOrig;
+      delete navigator.mediaDevices._gumPatched;
+      delete navigator.mediaDevices._gumOrig;
+    }
     if (mediaStream) {
       mediaStream.getTracks().forEach(t => t.stop());
       mediaStream = null;
@@ -1345,14 +1364,15 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     vids.forEach(v => {
       // 自前の要素(スキャンvideo・スナップショット/オーバーレイcanvas)は消さない
       if (v === videoElement || v === snapshotCanvas || v === overlayCanvas) return;
-      if (v.srcObject) {
+      if (v.srcObject && v.srcObject !== mediaStream) {
+        // mediaStreamは共有しているため停止しない（再利用でiOSの許可ダイアログを防ぐ）
         v.srcObject.getTracks().forEach(t => t.stop());
       }
       v.remove();
     });
 
     const vid = arSceneContainer.querySelector('video');
-    if (vid && vid.srcObject) {
+    if (vid && vid.srcObject && vid.srcObject !== mediaStream) {
       vid.srcObject.getTracks().forEach(t => t.stop());
     }
     arSceneContainer.innerHTML = '';
