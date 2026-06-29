@@ -117,26 +117,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // 言語設定(English基準＋日本語含む6言語)。AIの生成言語・On-device TTSの読み上げ言語に反映。
   const LANG_KEY = 'ar_agents_2_lang';
   const LANGS = [
-    { code: 'en',    label: 'English',    bcp47: 'en-US'  },
-    { code: 'ja',    label: '日本語',      bcp47: 'ja-JP'  },
-    { code: 'zh',    label: '中文',        bcp47: 'zh-CN'  },
-    { code: 'ko',    label: '한국어',      bcp47: 'ko-KR'  },
-    { code: 'es',    label: 'Español',    bcp47: 'es-ES'  },
-    { code: 'fr',    label: 'Français',   bcp47: 'fr-FR'  },
-    { code: 'de',    label: 'Deutsch',    bcp47: 'de-DE'  },
-    { code: 'pt',    label: 'Português',  bcp47: 'pt-BR'  },
-    { code: 'it',    label: 'Italiano',   bcp47: 'it-IT'  },
-    { code: 'ru',    label: 'Русский',    bcp47: 'ru-RU'  },
-    { code: 'ar',    label: 'العربية',    bcp47: 'ar-SA'  },
-    { code: 'hi',    label: 'हिन्दी',      bcp47: 'hi-IN'  },
-    { code: 'th',    label: 'ไทย',        bcp47: 'th-TH'  },
-    { code: 'vi',    label: 'Tiếng Việt', bcp47: 'vi-VN'  },
-    { code: 'id',    label: 'Indonesia',  bcp47: 'id-ID'  },
-    { code: 'nl',    label: 'Nederlands', bcp47: 'nl-NL'  },
-    { code: 'tr',    label: 'Türkçe',     bcp47: 'tr-TR'  },
-    { code: 'pl',    label: 'Polski',     bcp47: 'pl-PL'  },
-    { code: 'sv',    label: 'Svenska',    bcp47: 'sv-SE'  },
-    { code: 'uk',    label: 'Українська', bcp47: 'uk-UA'  },
+    { code: 'en',    flag: '🇺🇸', label: 'English',    bcp47: 'en-US'  },
+    { code: 'ja',    flag: '🇯🇵', label: '日本語',      bcp47: 'ja-JP'  },
+    { code: 'zh',    flag: '🇨🇳', label: '中文',        bcp47: 'zh-CN'  },
+    { code: 'ko',    flag: '🇰🇷', label: '한국어',      bcp47: 'ko-KR'  },
+    { code: 'es',    flag: '🇪🇸', label: 'Español',    bcp47: 'es-ES'  },
+    { code: 'fr',    flag: '🇫🇷', label: 'Français',   bcp47: 'fr-FR'  },
+    { code: 'de',    flag: '🇩🇪', label: 'Deutsch',    bcp47: 'de-DE'  },
+    { code: 'pt',    flag: '🇧🇷', label: 'Português',  bcp47: 'pt-BR'  },
+    { code: 'it',    flag: '🇮🇹', label: 'Italiano',   bcp47: 'it-IT'  },
+    { code: 'ru',    flag: '🇷🇺', label: 'Русский',    bcp47: 'ru-RU'  },
+    { code: 'ar',    flag: '🇸🇦', label: 'العربية',    bcp47: 'ar-SA'  },
+    { code: 'hi',    flag: '🇮🇳', label: 'हिन्दी',      bcp47: 'hi-IN'  },
+    { code: 'th',    flag: '🇹🇭', label: 'ไทย',        bcp47: 'th-TH'  },
+    { code: 'vi',    flag: '🇻🇳', label: 'Tiếng Việt', bcp47: 'vi-VN'  },
+    { code: 'id',    flag: '🇮🇩', label: 'Indonesia',  bcp47: 'id-ID'  },
+    { code: 'nl',    flag: '🇳🇱', label: 'Nederlands', bcp47: 'nl-NL'  },
+    { code: 'tr',    flag: '🇹🇷', label: 'Türkçe',     bcp47: 'tr-TR'  },
+    { code: 'pl',    flag: '🇵🇱', label: 'Polski',     bcp47: 'pl-PL'  },
+    { code: 'sv',    flag: '🇸🇪', label: 'Svenska',    bcp47: 'sv-SE'  },
+    { code: 'uk',    flag: '🇺🇦', label: 'Українська', bcp47: 'uk-UA'  },
   ];
   const UI_STRINGS = {
     en: {
@@ -1242,7 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // MindARコンパイル WebWorker
   // ==========================================
 
-  const USE_MIND_WORKER = true; // mindar-image-compiler.prod.js は Worker対応済み
+  const USE_MIND_WORKER = false; // CDNスクリプトがESM形式のためimportScriptsが失敗する
 
   const MIND_AR_WORKER_SRC = `
 self.window = self;
@@ -1580,6 +1580,9 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   // TTSエンジン設定 ('elevenlabs' | 'standalone')。standaloneはブラウザのWeb Speech API。
   const TTS_STORAGE_KEY = 'ar_agents_2_tts_engine';
   const speechSupported = typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance !== 'undefined';
+  // iOS Safari: cancel() がオーディオセッションを破棄するため、非ユーザージェスチャーからの speak() が失敗する
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   let ttsEngine = localStorage.getItem(TTS_STORAGE_KEY) || 'elevenlabs';
   if (ttsEngine === 'standalone' && !speechSupported) ttsEngine = 'elevenlabs';
 
@@ -1686,7 +1689,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   if (langSelect) {
     LANGS.forEach((l) => {
       const opt = document.createElement('option');
-      opt.value = l.code; opt.textContent = l.label;
+      opt.value = l.code; opt.textContent = (l.flag ? l.flag + ' ' : '') + l.label;
       langSelect.appendChild(opt);
     });
     langSelect.value = language;
@@ -1715,8 +1718,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   }
 
   function applyUIStrings() {
-    modeScanBtn.textContent = s('scanBtn');
-    modeBanterBtn.textContent = s('talkBtn');
+    modeScanBtn.setAttribute('aria-label', s('scanBtn'));
+    modeBanterBtn.setAttribute('aria-label', s('talkBtn'));
     resetBtn.textContent = s('resetBtn');
     const spiritLabelEl = document.getElementById('spirit-label');
     if (spiritLabelEl) spiritLabelEl.textContent = s('spiritLabel', spirits.length);
@@ -1940,7 +1943,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       banterAudio.pause();
       banterAudio.removeAttribute('src');
     }
-    if (speechSupported) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+    // iOS: cancel() はオーディオセッションを破棄する → 以降の speak() が not-allowed になる
+    if (speechSupported && !isIOS) { try { window.speechSynthesis.cancel(); } catch (e) {} }
     stopSynthKeepAlive();
     setSpeakingState(false);
   }
@@ -2515,7 +2519,6 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   });
 
   applyUIStrings();
-  showToast(s('toastTapSound'), true);
 
   // ===== デバッグ表示 =====
   // モバイル(タッチ端末)では「読み込み時間のみ」を少し大きく表示。詳細ログは /logs を参照。
