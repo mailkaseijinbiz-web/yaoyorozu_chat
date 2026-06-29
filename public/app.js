@@ -1483,6 +1483,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
       arReadyFired = false;
       buildScene();
+      // arReady待機前にリスナーを登録: arReadyと同時にtargetFoundが発火してもイベントを取り逃がさない
+      setupTargetListeners();
       const sceneEl = arSceneContainer.querySelector('a-scene');
       await new Promise((resolve) => {
         let done = false;
@@ -1497,7 +1499,6 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       isCompiling = false;
 
       loadingOverlay.classList.add('hidden');
-      setupTargetListeners();
       modeToggle.classList.remove('hidden');
       // コンパイル完了後は常にTalkへ自動切替して会話を開始
       setUIMode('banter');
@@ -1539,7 +1540,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     const targetsHTML = spirits.map((s, i) => `
       <a-entity mindar-image-target="targetIndex: ${i}" id="target-entity-${i}">
         <a-ring id="ring-${i}" color="${s.color}" radius-inner="0.45" radius-outer="0.5" position="0 0 0.05"
-                material="shader: flat; transparent: true; opacity: 0.85" visible="false"></a-ring>
+                material="shader: flat; opacity: 1" visible="false"></a-ring>
         <a-plane id="bubble-plane-${i}" position="0 0.85 0.1" width="1.6" height="0.8" billboard
                  material="shader: flat; transparent: true; side: double;" visible="false" scale="0 0 0"></a-plane>
       </a-entity>`).join('');
