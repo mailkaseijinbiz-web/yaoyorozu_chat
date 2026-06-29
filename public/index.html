@@ -58,7 +58,7 @@
 
       <div id="mode-toggle">
         <button id="mode-scan-btn" class="mode-btn active" aria-label="Scan"><span class="material-symbols-outlined">crop_free</span></button>
-        <button id="mode-banter-btn" class="mode-btn" aria-label="Talk"><span class="material-symbols-outlined">chat</span></button>
+        <button id="mode-banter-btn" class="mode-btn" aria-label="Talk"><span class="material-symbols-outlined">hearing</span></button>
       </div>
 
       <button id="reset-btn" class="hidden">Reset</button>
@@ -138,6 +138,12 @@
           </div>
         </div>
         <div class="settings-hint" id="model-hint">⚡ Cerebras: ultra-fast inference (Gemma 4 31B). OpenRouter: standard routing (Gemma 4 31B).</div>
+
+        <div class="settings-row settings-row--column">
+          <div class="settings-label" id="settings-banter-label">Banter style</div>
+        </div>
+        <textarea id="banter-style-input" class="settings-textarea" placeholder="e.g. Always speak in haiku. Be extremely dramatic." rows="3"></textarea>
+        <div class="settings-hint" id="banter-style-hint">Custom instruction added to every banter prompt.</div>
       </div>
     </div>
 

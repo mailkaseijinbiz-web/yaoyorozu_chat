@@ -1,47 +1,111 @@
-# AR Agents 2 — 精霊召喚プロトタイプ
+# YAOROZU CHAT
 
-身の回りのモノをスキャンして精霊を宿らせ、AR空間で精霊同士を会話させるプロトタイプ。
+> **Every Object Has a Spirit Inside.**
 
-- **本番**: https://ar-agents-2.vercel.app （HTTPSなのでスマホからそのまま動く）
-- **リポジトリ**: https://github.com/mailkaseijinbiz-web/ar_agents_2 （mainへのpushで自動デプロイ）
+Point your camera at any object and summon the spirit living within. Powered by Cerebras ultra-fast inference, spirits respond in under a second — making the AR world feel alive and seamless.
 
-## フロー
+**Live demo**: https://ar-agents-2.vercel.app  
+**Landing page**: https://ar-agents-2.vercel.app/lp
 
-1. **起動** — 背面カメラが立ち上がり、1つ目の器（青の魂）のスキャンが自動で始まる
-2. **凝視注入** — 対象を枠に収めてカメラを固定すると、認識した矩形が下から段々と色で塗られていき、3秒（100%）で自動注入 → 白フラッシュ + 効果音。カメラをそらすと進行は即リセット
-3. **自動遷移** — 1つ目の注入後、そのまま2つ目（赤の魂）のスキャンへ。2つ目が完了すると自動でMindARコンパイル → ARシーンへ
-4. **AR会話** — 器をカメラに写すと頭上に吹き出しが出現。「💬 精霊たちを会話させる」を押すと精霊たちがElevenLabsの音声で交互にしゃべり続ける（カメラが外れても会話は継続）
-5. **リセット** — 「🔄 最初からやり直す」でいつでもスロット0から再スタート
+---
 
-精霊名は Gemini の画像認識でカテゴリから自動命名される（時計→時の精霊、缶→ドリンクの精霊、本→知恵の精霊 など）。
+## How It Works
 
-## セットアップ
+| Step | Description |
+|---|---|
+| **1. Scan** | Tap the screen to scan any object. AI identifies it and generates a unique spirit — name, personality, and voice — in seconds. |
+| **2. Meet** | A glowing ring marks the spirit's vessel. Point your camera at the object again to anchor it in AR space. |
+| **3. Talk** | Switch to Talk mode. Spirits start bantering automatically — speech bubbles and TTS voices included. Tap a spirit to make it speak. |
+
+Spirits spotted in frame automatically trigger Talk mode after 5 seconds. When all spirits leave the frame, the app returns to Scan mode after 3 seconds.
+
+---
+
+## Features
+
+- **⚡ Cerebras ultra-fast inference** — Spirit generation < 1 sec, banter response < 800ms (up to 25× faster than standard GPU)
+- **🔀 Model switching** — Toggle between Cerebras (ultra-fast) and OpenRouter (standard) with one tap
+- **📸 Markerless AR** — MindAR image tracking. No printed markers needed — scan anything
+- **🗣️ TTS voices** — ElevenLabs high-quality cloud voices or on-device Web Speech API
+- **💬 Banter system** — Spirits trade comedy-duo-style lines and remember past conversations across sessions
+- **🌍 Multilingual** — Spirit names and dialogue generated in Japanese, English, Korean, and more
+- **📱 PWA** — Add to home screen for fullscreen experience
+- **🎨 Custom banter style** — Add your own prompt instruction in Settings to shape how spirits speak
+
+---
+
+## Setup
 
 ```bash
+git clone https://github.com/mailkaseijinbiz-web/yaoyorozu_chat.git
+cd yaoyorozu_chat
 npm install
-cp .env.example .env   # OPENROUTER_API_KEY を設定
+cp .env.example .env   # add your API keys
 npm start
 ```
 
-http://localhost:3000 を開く。
+Open http://localhost:3000 on your phone (HTTPS required for camera — see below).
 
-- `OPENROUTER_API_KEY` 未設定の場合は**デモモード**（固定の精霊名・固定セリフ）で動作する。モデルは `OPENROUTER_MODEL`（既定 `google/gemma-3-27b-it`）で切替可能
-- `ELEVENLABS_API_KEY` 未設定の場合は音声なし（テキストのみ）で会話が進む
-- スマホで試す場合はカメラAPIの制約上 **HTTPS が必須**。`npx cloudflared tunnel --url http://localhost:3000` や ngrok などでトンネルを張る
+### Environment variables
 
-## 構成
+| Variable | Required | Description |
+|---|---|---|
+| `CEREBRAS_API_KEY` | Recommended | Cerebras inference (ultra-fast mode) |
+| `OPENROUTER_API_KEY` | Recommended | OpenRouter — Gemma 4 31B |
+| `ELEVENLABS_API_KEY` | Optional | High-quality TTS (falls back to on-device voices) |
 
-| ファイル | 役割 |
+If no keys are set, the app runs in **demo mode** with fixed spirits and placeholder dialogue.
+
+### Testing on a phone locally
+
+Camera requires HTTPS. Use a tunnel:
+
+```bash
+npx cloudflared tunnel --url http://localhost:3000
+```
+
+---
+
+## Project structure
+
+```
+.
+├── server.js           # Express API server
+│   ├── POST /api/scan  # Object recognition & spirit generation (Gemma 4 via Cerebras/OpenRouter)
+│   ├── POST /api/banter# Spirit banter generation
+│   └── POST /api/tts   # ElevenLabs voice synthesis
+├── public/
+│   ├── app.js          # Frontend core (scan → AR → banter loop)
+│   ├── index.html      # A-Frame 1.5.0 + MindAR 1.2.5
+│   ├── style.css
+│   ├── sw.js           # Service Worker (PWA / offline)
+│   ├── libs/
+│   │   └── mindar-image-aframe.prod.js  # Self-hosted MindAR bundle
+│   └── lp/             # Landing page
+├── api/
+│   └── index.js        # Vercel serverless entry point
+└── vercel.json         # Vercel config (/api/* → Express, static → public/)
+```
+
+---
+
+## Deploy
+
+Pushing to `main` triggers an automatic Vercel deployment.
+
+```bash
+vercel deploy --prod
+```
+
+---
+
+## Tech stack
+
+| Category | Technology |
 |---|---|
-| `server.js` | Express + OpenRouter（Gemma 3 27b: 物体検出/動的精霊名 `/api/segment-vessels`、会話生成 `/api/banter`、ElevenLabs音声 `/api/tts`） |
-| `public/app.js` | スキャン→凝視ゲージ→自動注入→MindARランタイムコンパイル→ARシーン→Banterループ |
-| `public/index.html` | A-Frame 1.5.0 + MindAR 1.2.5 (CDN) |
-| `api/index.js` + `vercel.json` | Vercelサーバーレス対応（`/api/*`をExpressに委譲、静的ファイルは`public/`から配信） |
-
-## チューニング
-
-`public/app.js` 冒頭の定数で調整可能:
-
-- `GAZE_DURATION` — 凝視で注入完了までの時間（既定 3000ms）
-- `SCAN_INTERVAL` — AIスキャンの間隔（既定 900ms）
-- `MOTION_THRESHOLD` — カメラぶれ（視線逸らし）判定の感度。下げるほど敏感
+| AR | MindAR 1.2.5 + A-Frame 1.5.0 |
+| AI inference | Cerebras (Gemma 4 31B) / OpenRouter (Gemma 4 31B) |
+| TTS | ElevenLabs / Web Speech API |
+| Frontend | Vanilla JS + CSS Custom Properties |
+| Backend | Node.js + Express |
+| Hosting | Vercel (Serverless) |

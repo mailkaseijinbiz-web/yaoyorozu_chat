@@ -277,12 +277,49 @@ document.addEventListener('DOMContentLoaded', () => {
   const banterVisible = new Set();
   const visibleGraceTimers = {};
   const VISIBLE_GRACE_MS = 2200;
+  // 精霊が全員視界から消えた後、スキャンモードへ自動復帰するタイマー
+  let noSpiritAutoScanTimer = null;
+  const NO_SPIRIT_AUTO_SCAN_MS = 3000;
+  function clearNoSpiritTimer() {
+    if (noSpiritAutoScanTimer) { clearTimeout(noSpiritAutoScanTimer); noSpiritAutoScanTimer = null; }
+  }
+  function scheduleAutoScan() {
+    clearNoSpiritTimer();
+    noSpiritAutoScanTimer = setTimeout(() => {
+      noSpiritAutoScanTimer = null;
+      if (mode === 'ar' && uiMode === 'banter' && visibleTargets.size === 0) {
+        setUIMode('scan');
+      }
+    }, NO_SPIRIT_AUTO_SCAN_MS);
+  }
+
+  // scanモードで精霊が5秒間視界に留まったら自動でtalkモードへ切替
+  let spiritDwellTimer = null;
+  const SPIRIT_DWELL_MS = 5000;
+  function clearDwellTimer() {
+    if (spiritDwellTimer) { clearTimeout(spiritDwellTimer); spiritDwellTimer = null; }
+  }
+  function scheduleDwellAutoTalk() {
+    clearDwellTimer();
+    spiritDwellTimer = setTimeout(() => {
+      spiritDwellTimer = null;
+      if (mode === 'ar' && uiMode === 'scan' && visibleTargets.size > 0 && spirits.length >= 1) {
+        setUIMode('banter');
+        stopBanterLoop();
+        banterHistory = [];
+        startBanter();
+      }
+    }, SPIRIT_DWELL_MS);
+  }
+
   function clearBanterVisibility() {
     banterVisible.clear();
     Object.keys(visibleGraceTimers).forEach(k => {
       if (visibleGraceTimers[k]) clearTimeout(visibleGraceTimers[k]);
       delete visibleGraceTimers[k];
     });
+    clearNoSpiritTimer();
+    clearDwellTimer();
   }
 
   // ==========================================
@@ -455,7 +492,8 @@ document.addEventListener('DOMContentLoaded', () => {
       spirits: participants.map(i => ({ name: spirits[i].name, vessel: spirits[i].vessel, personality: spirits[i].personality })),
       history: filtered,
       situation: panelSituation,
-      language
+      language,
+      styleInstruction: banterStyleInstruction || undefined
     });
     return fetch('/api/banter', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
       .then(r => r.json())
@@ -1576,6 +1614,9 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
         visibleTargets.add(i);
         banterVisible.add(i);
         if (visibleGraceTimers[i]) { clearTimeout(visibleGraceTimers[i]); visibleGraceTimers[i] = null; }
+        clearNoSpiritTimer(); // 精霊が現れたら自動スキャン復帰をキャンセル
+        // scanモードで精霊が視界に入ったらdwellタイマー開始
+        if (uiMode === 'scan' && spirits.length >= 1) scheduleDwellAutoTalk();
         scanStatus.textContent = `${spirit.name} is here`;
         // スキャン済みの目印(リング)は、映っている間ずっと表示し続ける
         const ring = document.getElementById(`ring-${i}`);
@@ -1590,7 +1631,12 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
         hideSpeechBubble(i);
         const ring = document.getElementById(`ring-${i}`);
         if (ring) ring.setAttribute('visible', 'false');
-        if (visibleTargets.size === 0) scanStatus.textContent = '';
+        if (visibleTargets.size === 0) {
+          scanStatus.textContent = '';
+          // 全員消えたらdwellタイマーをキャンセルし、banterなら3秒後にscanへ復帰
+          clearDwellTimer();
+          if (uiMode === 'banter') scheduleAutoScan();
+        }
         updateScanGuideVisibility();
         // 猶予付き可視集合からの除外のみ(タブの自動切替はしない)
         if (visibleGraceTimers[i]) clearTimeout(visibleGraceTimers[i]);
@@ -1610,6 +1656,10 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   let audioUnlocked = false;
   // 無音wav: ユーザー操作起点でAudioをアンロックする (iOS Safari対策)
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+
+  // Banterスタイル設定
+  const BANTER_STYLE_KEY = 'ar_agents_2_banter_style';
+  let banterStyleInstruction = localStorage.getItem(BANTER_STYLE_KEY) || '';
 
   // TTSエンジン設定 ('elevenlabs' | 'standalone')。standaloneはブラウザのWeb Speech API。
   const TTS_STORAGE_KEY = 'ar_agents_2_tts_engine';
@@ -1737,6 +1787,16 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     });
   }
 
+  // ===== 設定パネル: Banterスタイル =====
+  const banterStyleInput = document.getElementById('banter-style-input');
+  if (banterStyleInput) {
+    banterStyleInput.value = banterStyleInstruction;
+    banterStyleInput.addEventListener('input', () => {
+      banterStyleInstruction = banterStyleInput.value.trim();
+      localStorage.setItem(BANTER_STYLE_KEY, banterStyleInstruction);
+    });
+  }
+
   // ===== 設定パネル: モデルプリセットの切替 =====
   function updateModelUI() {
     const cBtn = document.getElementById('model-cerebras');
@@ -1786,15 +1846,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     if (next === modelPreset) return;
     modelPreset = next;
     localStorage.setItem(MODEL_PRESET_KEY, next);
-    // 途中のリクエストをリセット
-    stopBanterLoop();
-    preFetchedBanterTurn = null;
-    pendingTurn = null;
-    scanSessionId++; // 進行中スキャンを無効化
-    isRequestPending = false;
-    lastScanMs = null; scanReqStart = null; lastBanterMs = null; banterReqStart = null;
-    scanSamples.length = 0; banterSamples.length = 0;
-    spirits.forEach((_, i) => hideSpeechBubble(i));
+    // 精霊をすべてリセットしてスキャン画面に戻る
+    executeReset();
     updateModelUI();
   }
 
@@ -2056,7 +2109,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       situation: currentSituation,
       forceSpeaker,
       language,
-      modelPreset
+      modelPreset,
+      styleInstruction: banterStyleInstruction || undefined
     });
     newcomerToAnnounce = null;
 
@@ -2460,6 +2514,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   // ==========================================
 
   function setUIMode(newMode) {
+    clearNoSpiritTimer(); // モード切替時はタイマーを常にキャンセル
+    clearDwellTimer();
     uiMode = newMode;
     modeScanBtn.classList.toggle('active', newMode === 'scan');
     modeBanterBtn.classList.toggle('active', newMode === 'banter');
@@ -2625,12 +2681,12 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     banterRow.appendChild(banterLabel); banterRow.appendChild(banterVal); debugEl.appendChild(banterRow);
 
     const tick = () => {
-      const scanMs = scanReqStart != null ? performance.now() - scanReqStart : lastScanMs;
-      const bMs = banterReqStart != null ? performance.now() - banterReqStart : lastBanterMs;
-      scanVal.textContent = scanMs != null ? Math.round(scanMs) + ' ms' : '—';
-      banterVal.textContent = bMs != null ? Math.round(bMs) + ' ms' : '—';
-      scanRow.style.opacity = scanReqStart != null ? '1' : '0.65';
-      banterRow.style.opacity = banterReqStart != null ? '1' : '0.65';
+      // 完了値をholdし、スキャン中もカウントアップせずに前回値を維持
+      scanVal.textContent = lastScanMs != null ? Math.round(lastScanMs) + ' ms' : '—';
+      banterVal.textContent = lastBanterMs != null ? Math.round(lastBanterMs) + ' ms' : '—';
+      // 通信中は明るく点灯、待機中は薄く
+      scanRow.style.opacity = scanReqStart != null ? '1' : '0.55';
+      banterRow.style.opacity = banterReqStart != null ? '1' : '0.55';
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

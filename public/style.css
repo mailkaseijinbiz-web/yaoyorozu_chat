@@ -1,7 +1,7 @@
 :root {
   --edge: 12px;          /* 全辺共通の余白 */
-  --banner-h: 36px;      /* 全幅バナーの高さ (padding 5*2 + line-height ~26) */
-  --top-ui: calc(var(--banner-h) + var(--edge));   /* バナー下端から --edge だけ空けた位置 */
+  --banner-h: 44px;      /* 全幅バナーの高さ (padding 9*2 + line-height ~26) */
+  --top-ui: calc(var(--banner-h) + var(--edge) + 6px);   /* バナー下端から余白をとった位置 */
   --bottom-ui: calc(var(--edge) + env(safe-area-inset-bottom, 0px)); /* ホームバー考慮 */
 }
 
@@ -54,22 +54,8 @@ html, body {
   gap: 16px;
 }
 #debug-overlay .dbg-val {
-  min-width: 62px;
+  flex: 1;
   text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-#debug-overlay .dbg-delta {
-  min-width: 44px;
-  text-align: right;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.9;
-}
-#debug-overlay .dbg-avg-row {
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
-  text-align: right;
-  margin-top: 2px;
   font-variant-numeric: tabular-nums;
 }
 /* bigクラスは後方互換のため維持 */
@@ -111,7 +97,7 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 5px 12px;
+  padding: 9px 12px;
   background: rgba(11, 15, 25, 0.72);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -245,7 +231,7 @@ html, body {
 /* ===== トースト通知 ===== */
 #toast {
   position: absolute;
-  top: 15%;
+  top: 73%;
   left: 50%;
   transform: translateX(-50%);
   padding: 11px 20px;
@@ -263,6 +249,10 @@ html, body {
 @keyframes toast-in {
   from { opacity: 0; transform: translate(-50%, -8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes toast-in-center {
+  from { opacity: 0; transform: translate(-50%, calc(-50% - 8px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
 }
 
 /* ===== 注入フラッシュ ===== */
@@ -514,7 +504,7 @@ html, body {
   max-height: 72vh;
   background: rgba(11, 15, 25, 0.97);
   border-radius: 20px 20px 0 0;
-  padding: 0 16px 40px;
+  padding: 0 20px 40px;
   overflow-y: auto;
   animation: panel-slide-up 0.3s ease-out;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -537,9 +527,9 @@ html, body {
   font-size: 15px;
   font-weight: bold;
   color: rgba(255, 255, 255, 0.9);
-  padding-bottom: 14px;
+  padding-bottom: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  margin-bottom: 4px;
+  margin-bottom: 10px;
 }
 #spirit-panel-close,
 #settings-close {
@@ -640,11 +630,11 @@ html, body {
 #panel-chat {
   max-height: 34vh;
   overflow-y: auto;
-  margin-bottom: 12px;
-  padding: 4px 2px;
+  margin-bottom: 16px;
+  padding: 8px 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .chat-msg {
   align-self: flex-start;
@@ -743,7 +733,7 @@ html, body {
   width: 100%;
   background: rgba(11, 15, 25, 0.97);
   border-radius: 20px 20px 0 0;
-  padding: 0 16px 40px;
+  padding: 0 20px 40px;
   animation: panel-slide-up 0.3s ease-out;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -752,8 +742,30 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 0 6px;
+  padding: 18px 0 8px;
 }
+.settings-row--column {
+  flex-direction: column;
+  align-items: flex-start;
+  padding-bottom: 6px;
+}
+.settings-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px 14px;
+  resize: vertical;
+  outline: none;
+  -webkit-appearance: none;
+}
+.settings-textarea::placeholder { color: rgba(255,255,255,0.3); }
+.settings-textarea:focus { border-color: rgba(255,255,255,0.35); }
 .settings-label {
   font-size: 14px;
   font-weight: bold;
@@ -839,9 +851,12 @@ html, body {
     font-size: 13px;
   }
 
-  /* トースト: 少し高めに */
+  /* トースト: 横画面はガイドが縦を占拠するため中央に表示 */
   #toast {
-    top: 6%;
+    top: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    animation: toast-in-center 0.3s ease-out;
     font-size: 13px;
     padding: 8px 16px;
   }
@@ -892,6 +907,13 @@ html, body {
   #capture-guide {
     width: 280px;
     height: 280px;
+  }
+}
+
+/* ===== PWAモード: 下部に追加余白 ===== */
+@media (display-mode: standalone) {
+  :root {
+    --bottom-ui: calc(var(--edge) + env(safe-area-inset-bottom, 0px) + 12px);
   }
 }
 

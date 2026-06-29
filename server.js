@@ -421,11 +421,12 @@ If there are no suitable objects, set "targets" to an empty array.${language && 
 // 精霊同士のBanter (N体対応)
 // ==========================================
 
-function buildSoloPrompt(spirit, turnCount, situation) {
+function buildSoloPrompt(spirit, turnCount, situation, styleInstruction) {
   const s = spirit;
   const sitText = situation
     ? `Current situation:\n- Place: ${situation.location || 'in a room'}\n- Weather / time: ${situation.weather || 'clear skies'}`
     : '';
+  const styleNote = styleInstruction ? `\n7. Additional instruction from the user: "${styleInstruction}"` : '';
   return `You write short, funny solo lines (a monologue) for a single spirit that inhabits an everyday object. It talks to itself and to whoever is watching.
 
 The spirit:
@@ -443,11 +444,11 @@ Rules:
 3. Stay in character (personality, manner of speech, how it refers to itself).
 4. Vary the topic line to line so it doesn't get repetitive. Talk to the viewer sometimes.
 5. Set isEnd to true only occasionally, to wrap a little bit with a punchline; otherwise false.
-6. Return JSON only — no preamble or explanation.`;
+6. Return JSON only — no preamble or explanation.${styleNote}`;
 }
 
-function buildBanterPrompt(spirits, newcomer, turnCount, situation, memory) {
-  if (spirits.length === 1) return buildSoloPrompt(spirits[0], turnCount, situation);
+function buildBanterPrompt(spirits, newcomer, turnCount, situation, memory, styleInstruction) {
+  if (spirits.length === 1) return buildSoloPrompt(spirits[0], turnCount, situation, styleInstruction);
   const cast = spirits.map((s, i) =>
     `[Spirit ${i} (agent${i})]
 - Spirit name: ${s.name || `Spirit ${i}`}
@@ -495,11 +496,11 @@ Rules:
 5. Be emotionally expressive! Use plenty of interjections and "!", "?", "..." to clearly convey mood and inflection.
 6. Strictly stay in character for each spirit (personality, manner of speech, how it refers to itself).
 7. Set isEnd to true ONLY on the final line that lands a punchline and wraps things up. Otherwise it must always be false.
-8. Return JSON only — no preamble or explanation.`;
+8. Return JSON only — no preamble or explanation.${styleInstruction ? `\n9. Additional instruction from the user: "${styleInstruction}"` : ''}`;
 }
 
 app.post('/api/banter', async (req, res) => {
-  const { spirits, history, memory, newcomer, situation, forceSpeaker, language, modelPreset } = req.body;
+  const { spirits, history, memory, newcomer, situation, forceSpeaker, language, modelPreset, styleInstruction } = req.body;
 
   if (!spirits || !Array.isArray(spirits) || spirits.length < 1) {
     return res.status(400).json({ error: 'At least 1 spirit is required' });
@@ -535,7 +536,7 @@ app.post('/api/banter', async (req, res) => {
   }
 
   try {
-    const systemPrompt = buildBanterPrompt(spirits, newcomer, turnCount, situation, memory);
+    const systemPrompt = buildBanterPrompt(spirits, newcomer, turnCount, situation, memory, styleInstruction);
 
     let conversation = 'Conversation so far:\n';
     if (history && history.length > 0) {
