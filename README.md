@@ -4,8 +4,8 @@
 
 Point your camera at any object and summon the spirit living within. Powered by Cerebras ultra-fast inference, spirits respond in under a second — making the AR world feel alive and seamless.
 
-**Live demo**: https://ar-agents-2.vercel.app  
-**Landing page**: https://ar-agents-2.vercel.app/lp
+**Live demo**: https://yaoyorozu-chat.vercel.app  
+**Landing page**: https://yaoyorozu-chat.vercel.app/lp
 
 ---
 

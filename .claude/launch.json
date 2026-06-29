@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "ar-agents-2",
+      "name": "yaoyorozu-chat",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 3000
