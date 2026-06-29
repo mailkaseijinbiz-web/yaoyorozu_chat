@@ -1720,6 +1720,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       language = langSelect.value;
       localStorage.setItem(LANG_KEY, language);
       applyUIStrings();
+      executeReset();
     });
   }
 
