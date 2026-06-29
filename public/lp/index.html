@@ -631,6 +631,13 @@
       background: rgba(255,255,255,.22); transition: background .25s, transform .25s, width .25s;
     }
     .uc-dot.active { background: var(--accent1); width: 22px; border-radius: 100px; }
+    /* スマホ: カルーセルを画面全幅・縦長に(写真を大きく) */
+    @media (max-width: 600px) {
+      .usecase-grid { width: 100vw; margin-left: calc(50% - 50vw); }
+      .uc-track { gap: 0; }
+      .uc-card { width: 100vw; border-radius: 0; border-left: 0; border-right: 0; }
+      .uc-card .uc-img-wrap { aspect-ratio: 1 / 1; }
+    }
 
     /* Photo area */
     .uc-img-wrap {
@@ -734,6 +741,12 @@
       .hero { padding: 100px 18px 60px; }
       .steps { grid-template-columns: 1fr; }
       .cta-banner { padding: 48px 24px; }
+      /* スマホ: 背景の重なりを抑えてすっきりさせる */
+      .hero-orb { filter: blur(80px); }
+      .hero-orb-1 { width: 340px; height: 340px; opacity: .2; }
+      .hero-orb-2 { width: 300px; height: 300px; opacity: .18; }
+      .hero-orb-3 { display: none; }
+      .phone-frame { box-shadow: 0 0 0 2px #23262e, 0 0 0 11px #111319, 0 0 0 12px #3a3d45, 0 28px 60px rgba(0,0,0,.7); }
     }
     /* ── ORIGIN / 八百万 ── */
     .origin {
@@ -765,9 +778,7 @@
     .origin-body p { color: rgba(232,234,240,.72); font-size: 16px; max-width: 580px; margin-bottom: 14px; }
     .origin-body strong { color: var(--text); font-weight: 700; }
     .origin-body em { color: var(--accent1); font-style: italic; }
-    @media (max-width: 760px) {
-      .origin { display: none; }   /* スマホでは八百万セクション全体を非表示 */
-    }
+    .origin { display: none; }   /* 八百万セクションは非表示(PC・スマホとも) */
 
     /* ── FUTURE / VISION ── */
     .vision-bg { background: linear-gradient(180deg, var(--bg), var(--bg2)); position: relative; }
