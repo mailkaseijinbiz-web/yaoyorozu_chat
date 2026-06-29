@@ -2,10 +2,22 @@
 
 > **Every Object Has a Spirit Inside.**
 
-Point your camera at any object and summon the spirit living within. Powered by Cerebras ultra-fast inference, spirits respond in under a second — making the AR world feel alive and seamless.
+🏮 Inspired by **八百万の神 (yaoyorozu no kami)** — the Japanese belief that a deity dwells in every single thing — YAOYOROZU CHAT lets you point your phone at any object and summon the spirit living inside it.
 
-**Live demo**: https://yaoyorozu-chat.vercel.app  
-**Landing page**: https://yaoyorozu-chat.vercel.app/lp
+**▶ Demo video**: https://www.youtube.com/watch?v=2xwxesu1jKQ  
+**🚀 Live demo**: https://yaoyorozu-chat.vercel.app/lp  
+**💻 GitHub**: https://github.com/mailkaseijinbiz-web/yaoyorozu_chat
+
+[![YAOYOROZU CHAT — Demo](https://img.youtube.com/vi/2xwxesu1jKQ/hqdefault.jpg)](https://www.youtube.com/watch?v=2xwxesu1jKQ)
+
+---
+
+## About
+
+- 🏮 **Inspired by 八百万の神 (yaoyorozu no kami)** — the Japanese belief that a deity dwells in every single thing
+- 📷 **Just point your phone** — scan any object and a spirit with its own name, personality, and voice appears anchored in your space, bantering aloud and speaking when you tap it
+- ⚡ **Powered by Cerebras (Gemma 4 31B)** — sub-second responses cross the line where AR starts to feel truly alive
+- 🤍 **Makes you kinder** — the more you live alongside objects that talk back, the more gently you treat the world; the real heart of the project
 
 ---
 
@@ -23,13 +35,13 @@ Spirits spotted in frame automatically trigger Talk mode after 5 seconds. When a
 
 ## Features
 
-- **⚡ Cerebras ultra-fast inference** — Spirit generation < 1 sec, banter response < 800ms (up to 25× faster than standard GPU)
+- **⚡ Cerebras ultra-fast inference** — Spirit generation < 1 sec, banter response < 800 ms (~7× faster than OpenRouter on standard GPUs — same Gemma 4 31B model, only the inference provider changes)
 - **🔀 Model switching** — Toggle between Cerebras (ultra-fast) and OpenRouter (standard) with one tap
 - **📸 Markerless AR** — MindAR image tracking. No printed markers needed — scan anything
 - **🗣️ TTS voices** — ElevenLabs high-quality cloud voices or on-device Web Speech API
 - **💬 Banter system** — Spirits trade comedy-duo-style lines and remember past conversations across sessions
 - **🌍 Multilingual** — Spirit names and dialogue generated in Japanese, English, Korean, and more
-- **📱 PWA** — Add to home screen for fullscreen experience
+- **📱 PWA** — Add to home screen for a fullscreen experience
 - **🎨 Custom banter style** — Add your own prompt instruction in Settings to shape how spirits speak
 
 ---
