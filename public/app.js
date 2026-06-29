@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
       guideScan: 'Tap the screen to scan an object',
       guideScanNew: 'Tap the screen to scan a new object',
       guideGazeName: (name) => `Gaze to summon "${name}"`,
-      loadingPrepare: 'Preparing MindAR compile...',
+      loadingPrepare: 'Initializing AR...',
       loadingRestore: 'Restoring spirits...',
       loadingExtract: (p) => `Extracting soul... ${Math.min(100, Math.round(p))}%`,
       loadingSummon: (p) => `Summoning... ${Math.min(100, Math.round(p))}%`,
@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
       guideScan: '画面をタップしてスキャン',
       guideScanNew: '画面をタップして新しい物体をスキャン',
       guideGazeName: (name) => `「${name}」を召喚するために見つめて`,
-      loadingPrepare: 'コンパイル準備中...',
+      loadingPrepare: 'AR初期設定中...',
       loadingRestore: '精霊を復元中...',
       loadingExtract: (p) => `魂を抽出中... ${Math.min(100, Math.round(p))}%`,
       loadingSummon: (p) => `召喚中... ${Math.min(100, Math.round(p))}%`,
@@ -2574,8 +2574,24 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   // 起動: カメラ即時開始・音声は初回タップでアンロック
   // ==========================================
 
+  let _arResizeTimer = null;
   window.addEventListener('resize', () => {
     syncOverlayCanvas();
+    // 画面回転時: MindARが注入したvideoとA-Frameのcanvasのピクセルサイズが古いまま残るため
+    // ブラウザのレイアウト確定後に上書きする
+    if (mode === 'ar') {
+      clearTimeout(_arResizeTimer);
+      _arResizeTimer = setTimeout(() => {
+        const sceneEl = arSceneContainer.querySelector('a-scene');
+        if (!sceneEl) return;
+        const w = window.innerWidth, h = window.innerHeight;
+        const vid = sceneEl.querySelector('video');
+        if (vid) { vid.style.width = w + 'px'; vid.style.height = h + 'px'; vid.style.top = '0px'; vid.style.left = '0px'; }
+        const cvs = sceneEl.querySelector('canvas');
+        if (cvs) { cvs.style.width = w + 'px'; cvs.style.height = h + 'px'; }
+        syncOverlayCanvas();
+      }, 200);
+    }
   });
 
   applyUIStrings();
