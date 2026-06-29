@@ -1779,6 +1779,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     pendingTurn = null;
     scanSessionId++; // 進行中スキャンを無効化
     isRequestPending = false;
+    lastScanMs = null; scanReqStart = null; lastBanterMs = null; banterReqStart = null;
     updateModelUI();
   }
 
@@ -2530,6 +2531,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     banterPaused = false;
     document.getElementById('banter-pause-overlay')?.classList.add('hidden');
     lastBanterErr = '—';
+    lastScanMs = null; scanReqStart = null; lastBanterMs = null; banterReqStart = null;
     if (compiledMindUrl) { URL.revokeObjectURL(compiledMindUrl); compiledMindUrl = null; }
     compiledMindBuffer = null;
     compiledSpiritCount = 0;
