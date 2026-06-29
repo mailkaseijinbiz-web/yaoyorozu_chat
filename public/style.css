@@ -193,6 +193,15 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* スキャンが始まっていない(タップ待ち)間だけ「タップでスキャン」を表示 */
+#guide-text.tap-prompt {
+  display: block !important;
+  animation: tapPromptPulse 1.6s ease-in-out infinite;
+}
+@keyframes tapPromptPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(0, 229, 255, 0.35); }
+  50%      { box-shadow: 0 0 24px rgba(0, 229, 255, 0.8); }
+}
 
 /* スキャン中に上下するスキャンライン */
 #scan-line {

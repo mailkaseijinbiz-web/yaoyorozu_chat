@@ -849,6 +849,22 @@ document.addEventListener('DOMContentLoaded', () => {
     scanLine.classList.toggle('hidden', !show);
   }
 
+  // スキャンが始まっていない(進行中の検出がなく、精霊も映っていない)タップ待ちの間は
+  // 「タップでスキャン」を明示して、ユーザーにタップを促す。
+  function refreshTapToScanPrompt() {
+    const idle = uiMode === 'scan' && !banterPaused && !isRequestPending
+              && gazeStartTime === null && visibleTargets.size === 0;
+    if (idle) {
+      const txt = (mode === 'scan') ? s('guideScan') : s('guideScanNew');
+      if (guideText.textContent !== txt) guideText.textContent = txt;
+      guideText.classList.add('tap-prompt');
+    } else {
+      guideText.classList.remove('tap-prompt');
+    }
+  }
+  setInterval(refreshTapToScanPrompt, 600);
+  refreshTapToScanPrompt();
+
   function startScanning() {
     scanSessionId++;
     isScanning = true;
