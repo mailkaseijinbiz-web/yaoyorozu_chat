@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { location: 'a cluttered work desk', weather: 'the soft glow of the setting sun at dusk' },
     { location: 'a study at midnight', weather: 'a starry sky with a cold wind blowing' }
   ];
+  let arPreinited = false; // 起動時AR初期設定が完了したか
   let mode = 'scan';    // 'scan' (初期登録) | 'ar' (ARシーン + 追加召喚)
   let uiMode = 'scan'; // 'scan' (スキャンUI表示) | 'banter' (会話鑑賞)
   let arReadyFired = false;
@@ -1420,7 +1421,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
     if (!recompile) {
       loadingOverlay.classList.remove('hidden');
-      loadingText.textContent = s('loadingPrepare');
+      if (!arPreinited) loadingText.textContent = s('loadingPrepare');
       stopCamera();
       videoElement.classList.add('hidden-feed');
       teardownScene();
@@ -2628,6 +2629,19 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   }
 
   (async () => {
+    // AR初期設定を起動時に先行実行: MindAR CompilerのWASMをプリロードし
+    // スキャン→AR遷移時のローディング画面を省く
+    loadingOverlay.classList.remove('hidden');
+    loadingText.textContent = s('loadingPrepare');
+    try {
+      if (window.MINDAR?.IMAGE?.Compiler) {
+        const c = new window.MINDAR.IMAGE.Compiler();
+        if (typeof c.loadModel === 'function') await c.loadModel();
+      }
+    } catch(e) {}
+    arPreinited = true;
+    loadingOverlay.classList.add('hidden');
+
     const started = await startCamera();
     if (!started) return;
     startScanning();
