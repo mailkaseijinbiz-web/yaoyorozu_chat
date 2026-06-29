@@ -46,6 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const GAZE_DURATION = 0;           // 0=タップ即注入
   const SCAN_INTERVAL = 700;         // AIスキャン(物体検出)の間隔(ms)
   const TURN_GAP_MS = 250;           // セリフ読み上げ後、次のターンまでの間(ms)
+  const MAX_SPIRITS = 5;             // 精霊の最大数（ところてん式FIFO）
+  const BANTER_PAUSE_AFTER = 30;     // この会話ターン数に達したら一時停止
   const COLORS = ['#00e5ff', '#ff5252', '#ffd740', '#69f0ae', '#e040fb', '#ff9100'];
 
   // ===== DOM =====
@@ -85,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let uiMode = 'scan'; // 'scan' (スキャンUI表示) | 'banter' (会話鑑賞)
   let arReadyFired = false;
   let banterTurns = 0;
+  let banterPaused = false;
   let lastBanterErr = '—';
   const spirits = []; // {image, vessel, name, personality, voice, color}
 
@@ -135,6 +138,89 @@ document.addEventListener('DOMContentLoaded', () => {
     { code: 'sv',    label: 'Svenska',    bcp47: 'sv-SE'  },
     { code: 'uk',    label: 'Українська', bcp47: 'uk-UA'  },
   ];
+  const UI_STRINGS = {
+    en: {
+      scanBtn: 'Scan', talkBtn: 'Talk', resetBtn: 'Reset', resetConfirm: 'Confirm?',
+      spiritLabel: (n) => n === 1 ? ' spirit' : ' spirits',
+      spiritPanelPrefix: 'Summoned spirits:',
+      settingsTitle: 'Settings', langLabel: 'Language',
+      langHint: "Spirits' names and speech are generated in this language.",
+      ttsLabel: 'Voice (TTS)', ttsElevenLabs: 'ElevenLabs', ttsOnDevice: 'On-device',
+      ttsHint: 'High-quality cloud voices (needs ElevenLabs API key).',
+      modelLabel: 'Model', modelCerebras: '⚡ Cerebras', modelOpenRouter: 'OpenRouter',
+      summoningVoice: (name) => `Summoning the spirit of ${name}!`,
+      modelHintCerebras: '⚡ Cerebras: ultra-fast inference (Gemma 4 31B).',
+      modelHintOpenRouter: 'OpenRouter: standard routing (Gemma 4 31B).',
+      guideGaze: 'Gaze at an object to summon its spirit...',
+      guideScan: 'Tap the screen to scan an object',
+      guideScanNew: 'Tap the screen to scan a new object',
+      guideGazeName: (name) => `Gaze to summon "${name}"`,
+      loadingPrepare: 'Preparing MindAR compile...',
+      loadingRestore: 'Restoring spirits...',
+      loadingExtract: (p) => `Extracting soul... ${Math.min(100, Math.round(p))}%`,
+      loadingSummon: (p) => `Summoning... ${Math.min(100, Math.round(p))}%`,
+      loadingUpdate: 'Updating AR scene...',
+      toastTapSound: 'Tap to enable sound',
+      toastNoCamera: 'Camera API unavailable. Please access over HTTPS.',
+      toastCameraPermission: 'Please allow camera access.',
+      toastSummonFirst: 'Summon a spirit first',
+      toastImageFailed: 'Failed to process the image. Please try again.',
+      toastSummonedOne: (name) => `✨ ${name} has taken form!`,
+      toastSummonedMany: (names) => `✨ ${names} have taken form!`,
+      toastSummoning: (name) => `✨ Summoning ${name}...`,
+      toastUpdatingAR: 'Updating AR scene...',
+      toastAddFailed: 'Failed to add spirit. Returning to the previous conversation...',
+      toastCompileFailed: 'AR compile failed. Re-scanning...',
+      toastCameraFailed: 'Failed to restart the camera. Please reload the page.',
+      toastTapSpeak: '🔊 Tap the screen to hear the spirits speak',
+      toastUpdate: 'Update available — tap to restart',
+      banterPauseTap: 'Tap to continue',
+    },
+    ja: {
+      scanBtn: 'スキャン', talkBtn: 'トーク', resetBtn: 'リセット', resetConfirm: '確認',
+      spiritLabel: ' 体の精霊',
+      spiritPanelPrefix: '召喚した精霊:',
+      settingsTitle: '設定', langLabel: '言語',
+      langHint: '精霊の名前と会話がこの言語で生成されます。',
+      ttsLabel: '音声 (TTS)', ttsElevenLabs: 'ElevenLabs', ttsOnDevice: 'オンデバイス',
+      ttsHint: '高品質クラウド音声（ElevenLabs APIキーが必要）。',
+      modelLabel: 'モデル', modelCerebras: '⚡ Cerebras', modelOpenRouter: 'OpenRouter',
+      summoningVoice: (name) => `${name}の精霊を召喚します！`,
+      modelHintCerebras: '⚡ Cerebras: 超高速推論 (Gemma 4 31B)。',
+      modelHintOpenRouter: 'OpenRouter: 標準ルーティング (Gemma 4 31B)。',
+      guideGaze: '物体を見つめて精霊を召喚...',
+      guideScan: '画面をタップしてスキャン',
+      guideScanNew: '画面をタップして新しい物体をスキャン',
+      guideGazeName: (name) => `「${name}」を召喚するために見つめて`,
+      loadingPrepare: 'コンパイル準備中...',
+      loadingRestore: '精霊を復元中...',
+      loadingExtract: (p) => `魂を抽出中... ${Math.min(100, Math.round(p))}%`,
+      loadingSummon: (p) => `召喚中... ${Math.min(100, Math.round(p))}%`,
+      loadingUpdate: 'ARシーンを更新中...',
+      toastTapSound: 'タップして音を有効にする',
+      toastNoCamera: 'カメラAPIが利用できません。HTTPSでアクセスしてください。',
+      toastCameraPermission: 'カメラへのアクセスを許可してください。',
+      toastSummonFirst: '先に精霊を召喚してください',
+      toastImageFailed: '画像の処理に失敗しました。もう一度お試しください。',
+      toastSummonedOne: (name) => `✨ ${name}が姿を現した！`,
+      toastSummonedMany: (names) => `✨ ${names}が姿を現した！`,
+      toastSummoning: (name) => `✨ ${name}を召喚中...`,
+      toastUpdatingAR: 'ARシーンを更新中...',
+      toastAddFailed: '精霊の追加に失敗しました。前の会話に戻ります...',
+      toastCompileFailed: 'ARコンパイルに失敗しました。再スキャン中...',
+      toastCameraFailed: 'カメラの再起動に失敗しました。ページをリロードしてください。',
+      toastTapSpeak: '🔊 画面をタップして精霊の声を聞く',
+      toastUpdate: '更新があります — タップして再起動',
+      banterPauseTap: 'タップして再開',
+    },
+  };
+  function s(key, ...args) {
+    const strings = UI_STRINGS[language] || UI_STRINGS.en;
+    const val = strings[key] !== undefined ? strings[key] : UI_STRINGS.en[key];
+    if (val === undefined) return key;
+    return typeof val === 'function' ? val(...args) : val;
+  }
+
   function detectOsLanguage() {
     const nav = (navigator.language || navigator.userLanguage || 'en').split('-')[0].toLowerCase();
     return (LANGS.find(l => l.code === nav) || LANGS[0]).code;
@@ -197,30 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (visibleGraceTimers[k]) clearTimeout(visibleGraceTimers[k]);
       delete visibleGraceTimers[k];
     });
-  }
-
-  // ==========================================
-  // 精霊の永続化 (LocalStorage)
-  // ==========================================
-
-  function saveSpirits() {
-    try {
-      localStorage.setItem(SPIRIT_STORAGE_KEY, JSON.stringify(
-        spirits.map(s => ({ ...s, sig: s.sig ? Array.from(s.sig) : null }))
-      ));
-    } catch (e) {
-      console.warn('Spirit save failed:', e);
-    }
-  }
-
-  function loadSpirits() {
-    try {
-      const raw = localStorage.getItem(SPIRIT_STORAGE_KEY);
-      if (!raw) return [];
-      return JSON.parse(raw).map(s => ({ ...s, sig: s.sig ? new Float32Array(s.sig) : null }));
-    } catch (e) {
-      return [];
-    }
   }
 
   // ==========================================
@@ -291,6 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateSpiritCountBtn() {
     spiritCountNum.textContent = spirits.length;
     spiritCountBtn.classList.toggle('hidden', spirits.length === 0);
+    const spiritLabelEl = document.getElementById('spirit-label');
+    if (spiritLabelEl) spiritLabelEl.textContent = s('spiritLabel', spirits.length);
   }
 
   // ==========================================
@@ -338,7 +402,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleMute(idx) {
     if (!spirits[idx]) return;
     spirits[idx].muted = !spirits[idx].muted;
-    saveSpirits();
     renderSpiritPanel();
     if (spirits[idx].muted) stopSpeaking(); // 発話中なら即停止
   }
@@ -346,7 +409,6 @@ document.addEventListener('DOMContentLoaded', () => {
   async function deleteSpirit(idx) {
     closeSpiritPanel();
     spirits.splice(idx, 1);
-    saveSpirits();
     updateSpiritCountBtn();
 
     if (spirits.length === 0) {
@@ -445,7 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startPanelChat() {
-    if (spirits.length < 1) { showToast('Summon a spirit first'); return; }
+    if (spirits.length < 1) { showToast(s('toastSummonFirst')); return; }
     stopBanterLoop();
     panelChatSession++;
     panelChatRunning = true;
@@ -485,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast('Camera API unavailable. Please access over HTTPS.', true);
+      showToast(s('toastNoCamera'), true);
       return false;
     }
     try {
@@ -496,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     } catch (err) {
       console.error('Camera error:', err);
-      showToast('Please allow camera access.', true);
+      showToast(s('toastCameraPermission'), true);
       return false;
     }
   }
@@ -701,8 +763,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateGuideUI() {
     const color = '#00e5ff';
     guideText.textContent = mode === 'scan'
-      ? 'Tap the screen to scan an object'
-      : 'Tap the screen to scan a new object';
+      ? s('guideScan')
+      : s('guideScanNew');
     scanStatus.textContent = '';
     guideText.style.borderColor = color;
     guideText.style.boxShadow = `0 0 14px ${color}59`;
@@ -889,7 +951,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // ステータステキスト
           if (newTargets.length === 1) {
             scanStatus.textContent = `${newTargets[0].target.name} — ${newTargets[0].target.spiritName}`;
-            if (mode === 'ar') guideText.textContent = `Gaze to summon "${newTargets[0].target.spiritName}"`;
+            if (mode === 'ar') guideText.textContent = s('guideGazeName', newTargets[0].target.spiritName);
           } else {
             const names = newTargets.map(t => t.target.spiritName).join(', ');
             scanStatus.textContent = `${names} — summon ${newTargets.length} at once!`;
@@ -1097,6 +1159,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const newNames = [];
 
       for (const { target, sig, color } of validTargets) {
+        // ところてん式: MAX_SPIRITS超えたら最古の精霊を押し出す
+        if (spirits.length >= MAX_SPIRITS) {
+          spirits.shift();
+          compiledMindBuffer = null;
+          compiledSpiritCount = 0;
+        }
         spirits.push({
           image: cropImageWithBox(fullImg, target.box),
           vessel: target.name || 'a mysterious vessel',
@@ -1110,18 +1178,28 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       showToast(newNames.length === 1
-        ? `✨ ${newNames[0]} has taken form!`
-        : `✨ ${newNames.join(', ')} have taken form!`);
-      saveSpirits();
+        ? s('toastSummonedOne', newNames[0])
+        : s('toastSummonedMany', newNames.join(', ')));
       updateSpiritCountBtn();
       resetBtn.classList.remove('hidden');
 
+      // 召喚アナウンス (fire-and-forget — ローディング中に再生)
+      const announceName = newNames[newNames.length - 1];
+
+      // 初回コンパイルをアナウンス再生と並行して先行開始 (ローディング待ち時間を短縮)
+      // ARが既に動いている場合は差分コンパイルを使うのでここでは不要
+      const earlyCompile = prevCount === 0
+        ? compileMindAR(spirits.map(sp => sp.image), null, () => {})
+        : null;
+
+      speakStandalone(spirits.length - 1, s('summoningVoice', announceName), () => {});
+
       // 1体でもAR(ソロ会話)へ。ARが既に動いていた(prevCount >= 1)なら新参として途中参加を通知。
       const newcomerName = prevCount >= 1 ? newNames[newNames.length - 1] : null;
-      await enterAR(newcomerName);
+      await enterAR(newcomerName, false, earlyCompile);
     } catch (err) {
       console.error('Infusion error:', err);
-      showToast('Failed to process the image. Please try again.');
+      showToast(s('toastImageFailed'));
       startScanning();
     }
   }
@@ -1164,7 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // MindARコンパイル WebWorker
   // ==========================================
 
-  const USE_MIND_WORKER = false; // MindARはDOM依存が多くWorker化が困難なため無効
+  const USE_MIND_WORKER = true; // mindar-image-compiler.prod.js は Worker対応済み
 
   const MIND_AR_WORKER_SRC = `
 self.window = self;
@@ -1295,7 +1373,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     bubbleTypeTimers.length = 0;
   }
 
-  async function enterAR(newcomerName, isRetry = false) {
+  async function enterAR(newcomerName, isRetry = false, earlyCompilePromise = null) {
     isCompiling = true;
     stopScanning();
     stopBanterLoop();
@@ -1314,12 +1392,12 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
     if (!recompile) {
       loadingOverlay.classList.remove('hidden');
-      loadingText.textContent = 'Preparing MindAR compile...';
+      loadingText.textContent = s('loadingPrepare');
       stopCamera();
       videoElement.classList.add('hidden-feed');
       teardownScene();
     } else {
-      showToast(newcomerName ? `✨ Summoning ${newcomerName}...` : 'Updating AR scene...');
+      showToast(newcomerName ? s('toastSummoning', newcomerName) : s('toastUpdatingAR'));
     }
 
     try {
@@ -1329,14 +1407,14 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
       if (buffer) {
         // IndexedDBキャッシュヒット: 再コンパイル不要
-        loadingText.textContent = 'Restoring spirits...';
+        loadingText.textContent = s('loadingRestore');
       } else if (recompile && compiledMindBuffer && compiledSpiritCount > 0 && spirits.length > compiledSpiritCount) {
         // 差分コンパイル: 新規精霊分だけコンパイルし、以前の結果とマージ
         try {
           buffer = await compileMindAR(
             spirits.slice(compiledSpiritCount).map(s => s.image),
             compiledMindBuffer.slice(0),
-            (p) => { loadingText.textContent = `Summoning... ${Math.min(100, Math.round(p))}%`; }
+            (p) => { loadingText.textContent = s('loadingSummon', p); }
           );
         } catch (e) {
           console.warn('Incremental compile failed, falling back to full compile:', e);
@@ -1346,11 +1424,26 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
       if (!buffer) {
         // フルコンパイル (初回 / 差分不可 / 精霊削除後)
-        buffer = await compileMindAR(
-          spirits.map(s => s.image),
-          null,
-          (p) => { loadingText.textContent = `Extracting soul... ${Math.min(100, Math.round(p))}%`; }
-        );
+        // 先行コンパイルが既に走っていればその結果を再利用する
+        if (earlyCompilePromise) {
+          try {
+            buffer = await earlyCompilePromise;
+          } catch (e) {
+            console.warn('Early compile failed, retrying on main thread:', e);
+            buffer = await compileMindAR(
+              spirits.map(s => s.image),
+              null,
+              (p) => { loadingText.textContent = s('loadingExtract', p); }
+            );
+          }
+          earlyCompilePromise = null;
+        } else {
+          buffer = await compileMindAR(
+            spirits.map(s => s.image),
+            null,
+            (p) => { loadingText.textContent = s('loadingExtract', p); }
+          );
+        }
       }
 
       // 次回の差分コンパイルとキャッシュのために保存
@@ -1364,7 +1457,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       // recompile: コンパイル完了後にシーン差し替え (ここだけ瞬時に暗転)
       if (recompile) {
         loadingOverlay.classList.remove('hidden');
-        loadingText.textContent = 'Updating AR scene...';
+        loadingText.textContent = s('loadingUpdate');
         teardownScene();
       }
 
@@ -1401,12 +1494,12 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
       // 直前まで動いていた構成(>=1体)が残っていれば、その構成でARを一度だけ作り直して会話を復帰。
       if (poppedNewcomer && !isRetry && spirits.length >= 1) {
-        showToast('Failed to add spirit. Returning to the previous conversation...');
+        showToast(s('toastAddFailed'));
         return enterAR(null, true);
       }
 
       // 復旧できない場合はスキャンモードへ安全に戻す。失敗時はモードに関わらずカメラを必ず生かす。
-      showToast('AR compile failed. Re-scanning...');
+      showToast(s('toastCompileFailed'));
       teardownScene();
       mode = 'scan';
       activeVideo = videoElement;
@@ -1415,7 +1508,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       if (recovered) {
         startScanning();
       } else {
-        showToast('Failed to restart the camera. Please reload the page.', true);
+        showToast(s('toastCameraFailed'), true);
       }
     }
   }
@@ -1512,6 +1605,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   // 画面(カメラ領域)をタップしたら即スキャン。ボタンやパネル操作のタップでは発火させない。
   document.addEventListener('pointerdown', (e) => {
     if (e.target && e.target.closest && e.target.closest(CONTROL_SELECTOR)) return;
+    if (banterPaused) { resumeFromPause(); return; }
     triggerScan();
   });
 
@@ -1555,6 +1649,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   }
 
   document.addEventListener('pointerdown', (e) => {
+    if (banterPaused) return; // resumeFromPause は上のハンドラで処理済み
     if (uiMode !== 'banter' || mode !== 'ar') return;
     if (e.target && e.target.closest && e.target.closest(CONTROL_SELECTOR)) return;
     const idx = spiritAtScreenPoint(e.clientX, e.clientY);
@@ -1598,6 +1693,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     langSelect.addEventListener('change', () => {
       language = langSelect.value;
       localStorage.setItem(LANG_KEY, language);
+      applyUIStrings();
     });
   }
 
@@ -1609,14 +1705,54 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     if (cBtn) cBtn.classList.toggle('active', modelPreset === 'cerebras');
     if (gBtn) gBtn.classList.toggle('active', modelPreset === 'gemma4');
     if (hint) hint.textContent = modelPreset === 'cerebras'
-      ? '⚡ Cerebras: ultra-fast inference (Gemma 4 31B).'
-      : 'OpenRouter: standard routing (Gemma 4 31B).';
+      ? s('modelHintCerebras')
+      : s('modelHintOpenRouter');
+    const banner = document.getElementById('model-banner');
+    if (banner) {
+      banner.textContent = modelPreset === 'cerebras' ? s('modelCerebras') : s('modelOpenRouter');
+      banner.className = modelPreset === 'cerebras' ? 'cerebras' : 'openrouter';
+    }
+  }
+
+  function applyUIStrings() {
+    modeScanBtn.textContent = s('scanBtn');
+    modeBanterBtn.textContent = s('talkBtn');
+    resetBtn.textContent = s('resetBtn');
+    const spiritLabelEl = document.getElementById('spirit-label');
+    if (spiritLabelEl) spiritLabelEl.textContent = s('spiritLabel', spirits.length);
+    const panelPrefixEl = document.getElementById('spirit-panel-prefix');
+    if (panelPrefixEl) panelPrefixEl.textContent = s('spiritPanelPrefix');
+    const settingsTitleEl = document.getElementById('settings-title-text');
+    if (settingsTitleEl) settingsTitleEl.textContent = s('settingsTitle');
+    const langLabelEl = document.getElementById('settings-lang-label');
+    if (langLabelEl) langLabelEl.textContent = s('langLabel');
+    const langHintEl = document.getElementById('settings-lang-hint');
+    if (langHintEl) langHintEl.textContent = s('langHint');
+    const ttsLabelEl = document.getElementById('settings-tts-label');
+    if (ttsLabelEl) ttsLabelEl.textContent = s('ttsLabel');
+    const ttsHintEl = document.getElementById('tts-hint');
+    if (ttsHintEl) ttsHintEl.textContent = s('ttsHint');
+    const ttsELEl = document.getElementById('tts-elevenlabs');
+    if (ttsELEl) ttsELEl.textContent = s('ttsElevenLabs');
+    const ttsODEl = document.getElementById('tts-standalone');
+    if (ttsODEl) ttsODEl.textContent = s('ttsOnDevice');
+    const modelLabelEl = document.getElementById('settings-model-label');
+    if (modelLabelEl) modelLabelEl.textContent = s('modelLabel');
+    const pauseTextEl = document.getElementById('banter-pause-text');
+    if (pauseTextEl) pauseTextEl.textContent = s('banterPauseTap');
+    updateModelUI();
   }
   function setModelPreset(p) {
     const next = p === 'gemma4' ? 'gemma4' : 'cerebras';
     if (next === modelPreset) return;
     modelPreset = next;
     localStorage.setItem(MODEL_PRESET_KEY, next);
+    // 途中のリクエストをリセット
+    stopBanterLoop();
+    preFetchedBanterTurn = null;
+    pendingTurn = null;
+    scanSessionId++; // 進行中スキャンを無効化
+    isRequestPending = false;
     updateModelUI();
   }
 
@@ -1793,7 +1929,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
         return;
       }
       audioUnlocked = false;
-      showToast('🔊 Tap the screen to hear the spirits speak', true);
+      showToast(s('toastTapSpeak'), true);
       finish(false);
     });
   }
@@ -1924,6 +2060,25 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     stopSpeaking();
   }
 
+  function enterBanterPause() {
+    banterPaused = true;
+    stopBanterLoop();
+    spirits.forEach((_, i) => hideSpeechBubble(i));
+    const overlay = document.getElementById('banter-pause-overlay');
+    const text = document.getElementById('banter-pause-text');
+    if (text) text.textContent = s('banterPauseTap');
+    if (overlay) overlay.classList.remove('hidden');
+  }
+
+  function resumeFromPause() {
+    banterPaused = false;
+    banterTurns = 0;
+    const overlay = document.getElementById('banter-pause-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    banterHistory = [];
+    startBanter();
+  }
+
   async function runBanterTurn(session) {
     if (!isBanterRunning || session !== banterSession) return;
     // 一覧内の会話中はARの会話を止める(音声がかぶらないように)
@@ -2002,6 +2157,9 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
             startBanter();
           }
         }, 5000);
+      } else if (banterTurns >= BANTER_PAUSE_AFTER) {
+        // 会話ターン上限に達したので一時停止モードへ
+        enterBanterPause();
       } else {
         const delay = spoke ? TURN_GAP_MS : Math.min(4500, 1100 + turn.data.reply.length * 90);
         banterTimeout = setTimeout(() => runBanterTurn(session), delay);
@@ -2235,6 +2393,10 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     modeBanterBtn.classList.toggle('active', newMode === 'banter');
     if (newMode === 'scan') {
       // スキャン中は会話を止めて、吹き出し・音声を一切出さない
+      if (banterPaused) {
+        banterPaused = false;
+        document.getElementById('banter-pause-overlay')?.classList.add('hidden');
+      }
       stopBanterLoop();
       spirits.forEach((_, i) => hideSpeechBubble(i));
       captureGuide.classList.remove('hidden');
@@ -2258,11 +2420,16 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   modeBanterBtn.addEventListener('click', () => {
     // 精霊が1体もいなければ会話できない。Scanタブのまま誘導トーストだけ出す。
     if (spirits.length < 1) {
-      showToast('Summon a spirit first');
+      showToast(s('toastSummonFirst'));
       return;
     }
     setUIMode('banter');
     // 再タップでも強制リスタート (スタック時の回復手段)
+    if (banterPaused) {
+      banterPaused = false;
+      banterTurns = 0;
+      document.getElementById('banter-pause-overlay')?.classList.add('hidden');
+    }
     stopBanterLoop();
     banterHistory = [];
     startBanter();
@@ -2280,11 +2447,11 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       return;
     }
     resetBtn.classList.add('confirm');
-    resetBtn.textContent = 'Confirm?';
+    resetBtn.textContent = s('resetConfirm');
     resetConfirmTimer = setTimeout(() => {
       resetConfirmTimer = null;
       resetBtn.classList.remove('confirm');
-      resetBtn.textContent = 'Reset';
+      resetBtn.textContent = s('resetBtn');
     }, 2000);
   });
 
@@ -2307,6 +2474,8 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     isCompiling = false;
     arReadyFired = false;
     banterTurns = 0;
+    banterPaused = false;
+    document.getElementById('banter-pause-overlay')?.classList.add('hidden');
     lastBanterErr = '—';
     if (compiledMindUrl) { URL.revokeObjectURL(compiledMindUrl); compiledMindUrl = null; }
     compiledMindBuffer = null;
@@ -2319,7 +2488,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     uiMode = 'scan';
     activeVideo = videoElement;
 
-    resetBtn.textContent = 'Reset';
+    resetBtn.textContent = s('resetBtn');
     resetBtn.classList.add('hidden');
     updateSpiritCountBtn();
     videoElement.classList.remove('hidden-feed');
@@ -2329,7 +2498,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     captureGuide.classList.remove('subtle');
     captureGuide.classList.remove('transparent');
     guideText.classList.remove('hidden');
-    guideText.textContent = 'Gaze at an object to summon its spirit...';
+    guideText.textContent = s('guideGaze');
     scanStatus.textContent = '';
     clearOverlay();
     resetGaze();
@@ -2342,10 +2511,11 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   // ==========================================
 
   window.addEventListener('resize', () => {
-    if (isScanning) syncOverlayCanvas();
+    syncOverlayCanvas();
   });
 
-  showToast('Tap to enable sound', true);
+  applyUIStrings();
+  showToast(s('toastTapSound'), true);
 
   // ===== デバッグ表示 =====
   // モバイル(タッチ端末)では「読み込み時間のみ」を少し大きく表示。詳細ログは /logs を参照。
@@ -2394,25 +2564,9 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   }
 
   (async () => {
-    // 前回の精霊をLocalStorageから復元
-    const saved = loadSpirits();
-    if (saved.length > 0) {
-      spirits.push(...saved);
-      updateSpiritCountBtn();
-      resetBtn.classList.remove('hidden');
-    }
-
     const started = await startCamera();
     if (!started) return;
-
-    if (spirits.length >= 1) {
-      showToast(spirits.length === 1
-        ? `✨ Restored ${spirits[0].name}`
-        : `✨ Restored ${spirits.length} spirits`);
-      await enterAR(null);
-    } else {
-      startScanning();
-    }
+    startScanning();
   })();
 
   // ===== Service Worker: アップデート検知 =====
@@ -2423,7 +2577,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
         newWorker.addEventListener('statechange', () => {
           // 新しいSWがインストール済みで、かつ既存SWが動いている = アップデートあり
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            showToast('Update available — tap to restart', true);
+            showToast(s('toastUpdate'), true);
             toastDiv.style.pointerEvents = 'auto';
             toastDiv.style.cursor = 'pointer';
             toastDiv.addEventListener('click', () => {

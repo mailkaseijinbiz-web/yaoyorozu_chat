@@ -28,6 +28,7 @@
 
     <!-- 共通オーバーレイUI -->
     <div id="overlay-ui">
+      <div id="model-banner" class="cerebras">⚡ Cerebras</div>
       <canvas id="camera-overlay-canvas"></canvas>
 
       <div id="capture-guide">
@@ -45,7 +46,7 @@
       <div id="toast" class="hidden"></div>
 
       <button id="spirit-count-btn" class="hidden">
-        <span id="spirit-count-num">0</span> spirits
+        <span id="spirit-count-num">0</span><span id="spirit-label"> spirits</span>
         <span class="speaking-waves" aria-hidden="true"><span></span><span></span><span></span></span>
       </button>
 
@@ -62,6 +63,12 @@
     <!-- 注入フラッシュ -->
     <div id="flash-overlay"></div>
 
+    <!-- 会話一時停止オーバーレイ -->
+    <div id="banter-pause-overlay" class="hidden">
+      <div id="banter-pause-icon">⏸</div>
+      <div id="banter-pause-text">Tap to continue</div>
+    </div>
+
     <!-- コンパイル中オーバーレイ -->
     <div id="loading-overlay" class="hidden">
       <div class="spinner"></div>
@@ -74,7 +81,7 @@
       <div id="spirit-panel-sheet">
         <div class="spirit-panel-handle"></div>
         <div class="spirit-panel-title">
-          Summoned spirits: <span id="spirit-panel-count">0</span>
+          <span id="spirit-panel-prefix">Summoned spirits:</span> <span id="spirit-panel-count">0</span>
           <button id="spirit-panel-close">✕</button>
         </div>
         <div id="panel-chat" class="hidden"></div>
@@ -88,17 +95,17 @@
       <div id="settings-sheet">
         <div class="spirit-panel-handle"></div>
         <div class="spirit-panel-title">
-          Settings
+          <span id="settings-title-text">Settings</span>
           <button id="settings-close">✕</button>
         </div>
         <div class="settings-row">
-          <div class="settings-label">Language</div>
+          <div class="settings-label" id="settings-lang-label">Language</div>
           <select id="lang-select" class="settings-select"></select>
         </div>
-        <div class="settings-hint">Spirits' names and speech are generated in this language.</div>
+        <div class="settings-hint" id="settings-lang-hint">Spirits' names and speech are generated in this language.</div>
 
         <div class="settings-row">
-          <div class="settings-label">Voice (TTS)</div>
+          <div class="settings-label" id="settings-tts-label">Voice (TTS)</div>
           <div class="settings-seg">
             <button id="tts-elevenlabs" class="seg-btn active">ElevenLabs</button>
             <button id="tts-standalone" class="seg-btn">On-device</button>
@@ -107,7 +114,7 @@
         <div class="settings-hint" id="tts-hint">High-quality cloud voices (needs ElevenLabs API key).</div>
 
         <div class="settings-row">
-          <div class="settings-label">Model</div>
+          <div class="settings-label" id="settings-model-label">Model</div>
           <div class="settings-seg">
             <button id="model-cerebras" class="seg-btn active">⚡ Cerebras</button>
             <button id="model-gemma4" class="seg-btn">OpenRouter</button>

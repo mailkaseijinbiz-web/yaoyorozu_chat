@@ -79,6 +79,35 @@ html, body {
   pointer-events: none;
 }
 
+/* ===== モデルバナー (最上部の帯) ===== */
+#model-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 26;
+  text-align: center;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.35s, color 0.35s, border-color 0.35s;
+}
+#model-banner.cerebras {
+  background: rgba(0, 229, 255, 0.18);
+  color: #00e5ff;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.35);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+}
+#model-banner.openrouter {
+  background: rgba(11, 15, 25, 0.55);
+  color: rgba(255, 255, 255, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
 #camera-overlay-canvas {
   position: absolute;
   top: 50%;
@@ -208,6 +237,37 @@ html, body {
   100% { opacity: 0; }
 }
 
+/* ===== 会話一時停止オーバーレイ ===== */
+#banter-pause-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#banter-pause-icon {
+  font-size: 64px;
+  opacity: 0.85;
+  animation: pausePulse 2s ease-in-out infinite;
+}
+#banter-pause-text {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+}
+@keyframes pausePulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.92); }
+}
+
 /* ===== コンパイルオーバーレイ ===== */
 #loading-overlay {
   position: fixed;
@@ -275,7 +335,7 @@ html, body {
 /* ===== 精霊カウントボタン ===== */
 #spirit-count-btn {
   position: absolute;
-  top: 12px;
+  top: 32px;
   left: 12px;
   z-index: 25;
   pointer-events: auto;
@@ -612,16 +672,24 @@ html, body {
 }
 .settings-select option { color: #000; }
 
-/* ===== 横画面対応 (mobile landscape) ===== */
-@media (orientation: landscape) and (max-height: 520px) {
-
-  /* ガイド枠: 画面の高さを基準にサイズを決め、真ん中に配置 */
+/* ===== 横画面: ガイド枠を画面中央に固定 (全デバイス共通) ===== */
+@media (orientation: landscape) {
   #capture-guide,
   #camera-overlay-canvas {
-    width: calc(100vh - 120px);
-    height: calc(100vh - 120px);
+    /* portrait の -56% を上書きして正確に中央揃え */
+    top: 50%;
+    left: 50%;
     transform: translate(-50%, -50%);
+    /* 高さ基準でサイズを決め、幅にも上限を設ける (svh fallback → vh) */
+    width: min(calc(100vh - 80px), 72vw);
+    height: min(calc(100vh - 80px), 72vw);
+    width: min(calc(100svh - 80px), 72vw);
+    height: min(calc(100svh - 80px), 72vw);
   }
+}
+
+/* ===== 横画面スマートフォン: コンパクトUI (max-height: 520px 以下) ===== */
+@media (orientation: landscape) and (max-height: 520px) {
 
   /* ガイドテキスト: コンパクトに上端へ */
   #guide-text {
@@ -661,9 +729,9 @@ html, body {
     font-size: 12px;
   }
 
-  /* 精霊カウント: 上端 */
+  /* 精霊カウント: バナーの下 */
   #spirit-count-btn {
-    top: 8px;
+    top: 30px;
     left: 8px;
   }
 

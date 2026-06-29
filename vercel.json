@@ -4,7 +4,10 @@
   "rewrites": [
     { "source": "/api/segment-vessels", "destination": "/api/index" },
     { "source": "/api/banter", "destination": "/api/index" },
-    { "source": "/api/tts", "destination": "/api/index" }
+    { "source": "/api/tts", "destination": "/api/index" },
+    { "source": "/api/clientlog", "destination": "/api/index" },
+    { "source": "/api/logs", "destination": "/api/index" },
+    { "source": "/api/logs/stream", "destination": "/api/index" }
   ],
   "functions": {
     "api/index.js": { "maxDuration": 30 }
