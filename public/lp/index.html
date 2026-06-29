@@ -95,12 +95,13 @@
     .hero-badge {
       display: inline-flex; align-items: center; gap: 7px;
       padding: 6px 16px; border-radius: 100px;
-      border: 1px solid rgba(255,122,26,.45);
-      background: rgba(255,122,26,.12);
+      border: 1px solid #ff8a3d;
+      background: #ff7a1a;
       font-size: 12px; font-weight: 700; letter-spacing: .5px;
       color: #fff; margin-bottom: 24px;
+      box-shadow: 0 0 18px rgba(255,122,26,.35);
     }
-    .hero-badge span { width: 6px; height: 6px; border-radius: 50%; background: #ff7a1a; box-shadow: 0 0 8px rgba(255,122,26,.8); animation: pulse 2s infinite; }
+    .hero-badge span { width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px rgba(255,255,255,.7); animation: pulse 2s infinite; }
 
     @keyframes pulse {
       0%,100% { opacity:1; transform:scale(1); }
@@ -561,10 +562,10 @@
     }
     .cmp-badge {
       margin-top: 22px; padding: 13px 16px;
-      background: #ff7a1a;
-      border: none; border-radius: 12px;
+      background: rgba(255,122,26,.1);
+      border: 1px solid rgba(255,122,26,.45); border-radius: 12px;
       text-align: center; font-weight: 700; font-size: 14px; color: #fff;
-      box-shadow: 0 0 30px rgba(255,122,26,.3);
+      box-shadow: 0 0 24px rgba(255,122,26,.12);
     }
     .cmp-note {
       margin-top: 12px; text-align: center;
@@ -963,7 +964,6 @@
             <div class="cmp-bar-row">
               <span class="cmp-bar-who">OpenRouter</span>
               <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.3s"></div></div>
-              <span class="cmp-speedup">7× slower</span>
             </div>
           </div>
         </div>
