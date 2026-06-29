@@ -152,6 +152,21 @@
       transition: transform .2s, box-shadow .2s;
     }
     .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 60px rgba(0,229,255,.45); }
+
+    /* iOS スティッキーCTA */
+    .sticky-cta {
+      display: none;
+      position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+      transform: translateX(-50%) translateY(160%);
+      z-index: 200; padding: 15px 48px; border-radius: 100px;
+      background: linear-gradient(135deg, var(--accent1), var(--accent2));
+      color: #fff; font-weight: 700; font-size: 16px; text-decoration: none; white-space: nowrap;
+      box-shadow: 0 12px 34px rgba(0,0,0,.55), 0 0 44px rgba(0,229,255,.35);
+      opacity: 0; pointer-events: none;
+      transition: transform .38s cubic-bezier(.22,.68,0,1.2), opacity .38s;
+    }
+    body.is-ios .sticky-cta { display: block; }
+    body.is-ios .sticky-cta.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
     .btn-secondary {
       padding: 16px 36px;
       background: rgba(255,255,255,.06);
@@ -288,10 +303,10 @@
     /* 吹き出し (カップから出る) */
     .phone-bubble {
       background: #fff; border: 3px solid #ffd740;
-      border-radius: 18px; padding: 13px 19px;
+      border-radius: 18px; padding: 11px 15px;
       font-family: 'Bangers', sans-serif;
-      font-size: 21px; line-height: 1.12;
-      max-width: 254px; width: max-content; text-align: center; color: #111;
+      font-size: 18px; line-height: 1.1;
+      max-width: 270px; width: max-content; text-align: center; color: #111;
       box-shadow: 0 8px 22px rgba(0,0,0,.45);
       position: absolute; left: 50%; bottom: 56%; z-index: 5;
       transform: translateX(-50%) scale(0);
@@ -629,7 +644,7 @@
     .uc-card:hover .uc-img { transform: scale(1.04); }
     .uc-img-overlay {
       position: absolute; inset: 0;
-      background: linear-gradient(to bottom, rgba(0,0,0,.25) 0%, rgba(7,9,15,.55) 100%);
+      background: linear-gradient(to bottom, rgba(0,0,0,0) 42%, rgba(7,9,15,.5) 100%);
     }
 
     /* Scene badge — top left */
@@ -751,9 +766,7 @@
     .origin-body strong { color: var(--text); font-weight: 700; }
     .origin-body em { color: var(--accent1); font-style: italic; }
     @media (max-width: 760px) {
-      .origin-inner { grid-template-columns: 1fr; gap: 28px; text-align: center; }
-      .origin-visual { display: none; }
-      .origin-body p { margin-left: auto; margin-right: auto; }
+      .origin { display: none; }   /* スマホでは八百万セクション全体を非表示 */
     }
 
     /* ── FUTURE / VISION ── */
@@ -800,6 +813,9 @@
     </select>
   </div>
 </nav>
+
+<!-- iOS: ヒーローのCTAが画面外のときフッターに追従表示 -->
+<a href="/" class="sticky-cta" id="sticky-cta">Get Started</a>
 
 <!-- HERO -->
 <section class="hero">
@@ -1288,6 +1304,24 @@
         location.href = u.toString();
       } catch (e) { location.reload(); }
     });
+  })();
+</script>
+
+<!-- iOS: フッター追従CTA -->
+<script>
+  (function () {
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!isIOS) return;
+    document.body.classList.add('is-ios');
+    const sticky = document.getElementById('sticky-cta');
+    const heroBtn = document.querySelector('.hero-btns .btn-primary');
+    if (!sticky || !heroBtn) return;
+    sticky.textContent = heroBtn.textContent;  // 翻訳済みの文言に同期
+    const io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { sticky.classList.toggle('show', !e.isIntersecting); });
+    }, { threshold: 0 });
+    io.observe(heroBtn);
   })();
 </script>
 
