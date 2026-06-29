@@ -2572,43 +2572,28 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
   // モバイル(タッチ端末)では「読み込み時間のみ」を少し大きく表示。詳細ログは /logs を参照。
   // デスクトップは診断用に全項目を表示する。
   const debugEl = document.getElementById('debug-overlay');
-  const isTouch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  if (debugEl && isTouch) {
-    // モバイル: 画像認識(/api/segment-vessels)とBanter(/api/banter)のうち、
-    // 現在通信中の方(なければ直近に更新された方)を1つだけ ms で表示。右揃え・Helvetica。
+  if (debugEl) {
+    // 画像認識とBanterの両方を常時2行表示
     debugEl.classList.add('big');
-    const row = document.createElement('div'); row.className = 'dbg-row';
-    const labelEl = document.createElement('span'); labelEl.className = 'dbg-label';
-    const valEl = document.createElement('span'); valEl.className = 'dbg-val';
-    row.appendChild(labelEl); row.appendChild(valEl); debugEl.appendChild(row);
+
+    const scanRow = document.createElement('div'); scanRow.className = 'dbg-row';
+    const scanLabel = document.createElement('span'); scanLabel.className = 'dbg-label'; scanLabel.textContent = 'Image Recognition:';
+    const scanVal = document.createElement('span'); scanVal.className = 'dbg-val';
+    scanRow.appendChild(scanLabel); scanRow.appendChild(scanVal); debugEl.appendChild(scanRow);
+
+    const banterRow = document.createElement('div'); banterRow.className = 'dbg-row';
+    const banterLabel = document.createElement('span'); banterLabel.className = 'dbg-label'; banterLabel.textContent = 'Banter:';
+    const banterVal = document.createElement('span'); banterVal.className = 'dbg-val';
+    banterRow.appendChild(banterLabel); banterRow.appendChild(banterVal); debugEl.appendChild(banterRow);
+
     const tick = () => {
-      let label, ms;
-      if (scanReqStart != null) { label = 'Image Recognition:'; ms = performance.now() - scanReqStart; }
-      else if (banterReqStart != null) { label = 'Banter:'; ms = performance.now() - banterReqStart; }
-      else if (lastBanterAt >= lastScanAt && lastBanterMs != null) { label = 'Banter:'; ms = lastBanterMs; }
-      else if (lastScanMs != null) { label = 'Image Recognition:'; ms = lastScanMs; }
-      else { label = 'Image Recognition:'; ms = null; }
-      labelEl.textContent = label;
-      valEl.textContent = ms != null ? Math.round(ms) + ' ms' : '—';
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  } else {
-    // デスクトップもモバイルと同じ1行・ms・Helvetica・右揃え表示
-    debugEl.classList.add('big');
-    const row = document.createElement('div'); row.className = 'dbg-row';
-    const labelEl = document.createElement('span'); labelEl.className = 'dbg-label';
-    const valEl = document.createElement('span'); valEl.className = 'dbg-val';
-    row.appendChild(labelEl); row.appendChild(valEl); debugEl.appendChild(row);
-    const tick = () => {
-      let label, ms;
-      if (scanReqStart != null) { label = 'Image Recognition:'; ms = performance.now() - scanReqStart; }
-      else if (banterReqStart != null) { label = 'Banter:'; ms = performance.now() - banterReqStart; }
-      else if (lastBanterAt >= lastScanAt && lastBanterMs != null) { label = 'Banter:'; ms = lastBanterMs; }
-      else if (lastScanMs != null) { label = 'Image Recognition:'; ms = lastScanMs; }
-      else { label = 'Image Recognition:'; ms = null; }
-      labelEl.textContent = label;
-      valEl.textContent = ms != null ? Math.round(ms) + ' ms' : '—';
+      const scanMs = scanReqStart != null ? performance.now() - scanReqStart : lastScanMs;
+      const bMs = banterReqStart != null ? performance.now() - banterReqStart : lastBanterMs;
+      scanVal.textContent = scanMs != null ? Math.round(scanMs) + ' ms' : '—';
+      banterVal.textContent = bMs != null ? Math.round(bMs) + ' ms' : '—';
+      // 通信中は強調
+      scanRow.style.opacity = scanReqStart != null ? '1' : '0.65';
+      banterRow.style.opacity = banterReqStart != null ? '1' : '0.65';
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
