@@ -779,53 +779,5 @@ html, body {
 }
 
 /* ===== PC: スマホフレームを中央表示 ===== */
-@media (min-width: 769px) {
-  html {
-    background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  html, body {
-    overflow: visible;
-  }
-  body {
-    width: auto;
-    height: auto;
-  }
-  #app-wrap {
-    position: relative;
-    width: 390px;
-    height: 844px;
-    overflow: hidden;
-    transform: translateZ(0); /* position:fixed の子要素の基準をこの要素にする */
-    border-radius: 20px;
-    box-shadow: 0 12px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.08);
-  }
-  /* vw/vh はビューポート基準のままなので、スキャンガイドをコンテナ幅に合わせて上書き */
-  #camera-overlay-canvas,
-  #capture-guide {
-    width: 270px !important;
-    height: 270px !important;
-  }
-
-  /* PC: デバッグ情報はフレーム外の右下に小さく表示 */
-  #debug-overlay {
-    top: auto;
-    right: 16px;
-    bottom: 16px;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 10px;
-    background: rgba(0, 0, 0, 0.45);
-    color: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(255,255,255,0.07);
-  }
-  #debug-overlay .dbg-row {
-    gap: 12px;
-  }
-  #debug-overlay .dbg-val {
-    min-width: 52px;
-  }
-}
+/* PC: 全画面表示 (スマホと同じ挙動) */
 
