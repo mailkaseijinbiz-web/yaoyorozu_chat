@@ -196,14 +196,6 @@
       background: linear-gradient(180deg, rgba(8,10,20,.5) 0%, rgba(8,10,20,0) 30%, rgba(8,10,20,0) 68%, rgba(8,10,20,.4) 100%);
     }
 
-    /* ARビューファインダーの四隅 */
-    .ar-frame { position: absolute; inset: 18px; z-index: 2; pointer-events: none; }
-    .ar-frame i { position: absolute; width: 22px; height: 22px; border: 2px solid rgba(0,229,255,.7); filter: drop-shadow(0 0 4px rgba(0,229,255,.5)); }
-    .ar-frame i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 7px 0 0 0; }
-    .ar-frame i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 7px 0 0; }
-    .ar-frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 7px; }
-    .ar-frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 7px 0; }
-
     /* スキャンライン */
     .ar-scanline {
       position: absolute; left: 10px; right: 10px; height: 2px; top: 4%; z-index: 3;
@@ -781,7 +773,6 @@
     <div class="phone-frame">
       <div class="phone-notch"></div>
       <div class="phone-screen">
-        <div class="ar-frame"><i></i><i></i><i></i><i></i></div>
         <div class="ar-scanline"></div>
         <div class="ar-target">
           <div class="ar-ping"></div>
