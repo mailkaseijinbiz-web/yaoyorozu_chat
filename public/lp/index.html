@@ -537,7 +537,7 @@
     }
     .cmp-bar-group { display: flex; flex-direction: column; gap: 7px; }
     .cmp-bar-row { display: flex; align-items: center; gap: 8px; }
-    .cmp-bar-who { font-size: 9px; width: 56px; color: rgba(255,255,255,.35); text-align: right; flex-shrink: 0; }
+    .cmp-bar-who { font-size: 9px; width: 64px; color: rgba(255,255,255,.35); text-align: right; flex-shrink: 0; }
     .cmp-bar-track { flex: 1; height: 10px; background: rgba(255,255,255,.05); border-radius: 100px; overflow: hidden; }
     .cmp-bar-fill {
       height: 100%; border-radius: 100px;
@@ -566,6 +566,11 @@
       text-align: center; font-weight: 700; font-size: 14px; color: #fff;
       box-shadow: 0 0 30px rgba(255,122,26,.3);
     }
+    .cmp-note {
+      margin-top: 12px; text-align: center;
+      font-size: 11px; line-height: 1.5; color: rgba(255,255,255,.42);
+    }
+    .cmp-note strong { color: rgba(255,255,255,.7); font-weight: 700; }
 
     /* ── USE CASES ── */
     .usecase-grid {
@@ -940,7 +945,7 @@
       <div class="cmp-card">
         <div class="cmp-header">
           <div class="cmp-col-head cerebras">⚡ Cerebras</div>
-          <div class="cmp-col-head std">Standard GPU</div>
+          <div class="cmp-col-head std">OpenRouter</div>
         </div>
 
         <!-- Spirit generation -->
@@ -956,14 +961,15 @@
               <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:14%;--bar-delay:.1s"></div></div>
             </div>
             <div class="cmp-bar-row">
-              <span class="cmp-bar-who">Standard</span>
+              <span class="cmp-bar-who">OpenRouter</span>
               <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.3s"></div></div>
               <span class="cmp-speedup">7× slower</span>
             </div>
           </div>
         </div>
 
-        <div class="cmp-badge">⚡ 7× Faster than standard GPU inference</div>
+        <div class="cmp-badge">⚡ 7× Faster than OpenRouter (standard GPU)</div>
+        <div class="cmp-note">Apples-to-apples: the same model — <strong>Gemma 4 31B</strong> — on both. Only the inference provider changes.</div>
       </div>
     </div>
   </div>
