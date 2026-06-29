@@ -98,10 +98,10 @@ html, body {
   transition: background 0.35s, color 0.35s, border-color 0.35s;
 }
 #model-banner.cerebras {
-  background: rgba(0, 229, 255, 0.18);
-  color: #00e5ff;
-  border-bottom: 1px solid rgba(0, 229, 255, 0.35);
-  text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+  background: #ff6a00;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: none;
 }
 #model-banner.openrouter {
   background: rgba(11, 15, 25, 0.55);
