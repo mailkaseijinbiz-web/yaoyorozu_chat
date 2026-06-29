@@ -114,8 +114,8 @@ html, body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -56%);
-  width: min(72vw, 60vh);
-  height: min(72vw, 60vh);
+  width: min(72vw, 60vh, 400px);
+  height: min(72vw, 60vh, 400px);
   pointer-events: none;
 }
 
@@ -125,8 +125,8 @@ html, body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -56%);
-  width: min(72vw, 60vh);
-  height: min(72vw, 60vh);
+  width: min(72vw, 60vh, 400px);
+  height: min(72vw, 60vh, 400px);
   transition: opacity 0.4s;
 }
 #capture-guide.subtle { opacity: 0.35; }
