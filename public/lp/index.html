@@ -507,9 +507,9 @@
       text-transform: uppercase; padding: 8px 10px; border-radius: 8px;
     }
     .cmp-col-head.cerebras {
-      background: rgba(255,122,26,.18); color: #fff;
-      border: 1px solid rgba(255,122,26,.55);
-      box-shadow: 0 0 16px rgba(255,122,26,.25);
+      background: #ff7a1a; color: #fff;
+      border: 1px solid #ff8a3d;
+      box-shadow: 0 0 16px rgba(255,122,26,.4);
     }
     .cmp-col-head.std {
       background: rgba(255,255,255,.04); color: var(--muted);
@@ -533,7 +533,7 @@
       50%       { box-shadow: 0 0 28px rgba(255,122,26,.55), inset 0 0 18px rgba(255,122,26,.14); }
     }
     .cmp-val.cerebras {
-      background: rgba(255,122,26,.12); border: 1px solid rgba(255,122,26,.45);
+      background: #ff7a1a; border: none;
       font-family: 'Bangers', sans-serif; font-size: 28px; color: #fff;
       animation: cmpPulse 2.8s ease-in-out infinite;
       letter-spacing: 1px;
@@ -569,10 +569,10 @@
     }
     .cmp-badge {
       margin-top: 22px; padding: 13px 16px;
-      background: linear-gradient(135deg, rgba(255,122,26,.2), rgba(255,157,61,.12));
-      border: 1px solid rgba(255,122,26,.4); border-radius: 12px;
+      background: #ff7a1a;
+      border: none; border-radius: 12px;
       text-align: center; font-weight: 700; font-size: 14px; color: #fff;
-      box-shadow: 0 0 30px rgba(255,122,26,.12);
+      box-shadow: 0 0 30px rgba(255,122,26,.3);
     }
 
     /* ── USE CASES ── */
@@ -846,77 +846,6 @@
   </div>
 </section>
 
-<!-- CEREBRAS SPEED -->
-<section class="cerebras-section">
-  <div class="container">
-    <div class="cerebras-inner">
-      <div>
-        <div class="cerebras-label">Powered by Cerebras</div>
-        <h2>Zero Wait.<br><span style="color:var(--accent1)">Zero Lag.</span></h2>
-        <p>
-          Spirits respond almost instantly — because YAOYOROZU CHAT runs inference on
-          <strong style="color:var(--text)">Cerebras</strong>, the world's fastest AI inference
-          platform. While other apps stutter waiting for a cloud response, spirits here are
-          already talking.
-        </p>
-        <p>
-          That speed isn't a technical footnote — it's what makes the AR world feel
-          <em style="color:var(--accent1)">alive</em>. Scan an object, and its spirit appears
-          before you've even lowered your phone.
-        </p>
-      </div>
-      <div class="cmp-card">
-        <div class="cmp-header">
-          <div class="cmp-col-head cerebras">⚡ Cerebras</div>
-          <div class="cmp-col-head std">Standard GPU</div>
-        </div>
-
-        <!-- Spirit generation -->
-        <div class="cmp-metric">
-          <div class="cmp-metric-label">Spirit generation &nbsp;<span class="arrow">↓</span> lower is faster</div>
-          <div class="cmp-vals">
-            <div class="cmp-val cerebras">&lt; 1 sec</div>
-            <div class="cmp-val std">~8 sec</div>
-          </div>
-          <div class="cmp-bar-group">
-            <div class="cmp-bar-row">
-              <span class="cmp-bar-who">Cerebras</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:12%;--bar-delay:.1s"></div></div>
-            </div>
-            <div class="cmp-bar-row">
-              <span class="cmp-bar-who">Standard</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.3s"></div></div>
-              <span class="cmp-speedup">8× slower</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Banter response -->
-        <div class="cmp-metric">
-          <div class="cmp-metric-label">Banter response &nbsp;<span class="arrow">↓</span> lower is faster</div>
-          <div class="cmp-vals">
-            <div class="cmp-val cerebras">&lt; 800ms</div>
-            <div class="cmp-val std">~5 sec</div>
-          </div>
-          <div class="cmp-bar-group">
-            <div class="cmp-bar-row">
-              <span class="cmp-bar-who">Cerebras</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:15%;--bar-delay:.2s"></div></div>
-            </div>
-            <div class="cmp-bar-row">
-              <span class="cmp-bar-who">Standard</span>
-              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.4s"></div></div>
-              <span class="cmp-speedup">6× slower</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="cmp-badge">⚡ Up to 25× faster than standard GPU inference</div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- USE CASES -->
 <section>
   <div class="container">
@@ -1022,6 +951,77 @@
         </div>
       </div>
 
+    </div>
+  </div>
+</section>
+
+<!-- CEREBRAS SPEED -->
+<section class="cerebras-section">
+  <div class="container">
+    <div class="cerebras-inner">
+      <div>
+        <div class="cerebras-label">Powered by Cerebras</div>
+        <h2>Zero Wait.<br><span style="color:var(--accent1)">Zero Lag.</span></h2>
+        <p>
+          Spirits respond almost instantly — because YAOYOROZU CHAT runs inference on
+          <strong style="color:var(--text)">Cerebras</strong>, the world's fastest AI inference
+          platform. While other apps stutter waiting for a cloud response, spirits here are
+          already talking.
+        </p>
+        <p>
+          That speed isn't a technical footnote — it's what makes the AR world feel
+          <em style="color:var(--accent1)">alive</em>. Scan an object, and its spirit appears
+          before you've even lowered your phone.
+        </p>
+      </div>
+      <div class="cmp-card">
+        <div class="cmp-header">
+          <div class="cmp-col-head cerebras">⚡ Cerebras</div>
+          <div class="cmp-col-head std">Standard GPU</div>
+        </div>
+
+        <!-- Spirit generation -->
+        <div class="cmp-metric">
+          <div class="cmp-metric-label">Spirit generation &nbsp;<span class="arrow">↓</span> lower is faster</div>
+          <div class="cmp-vals">
+            <div class="cmp-val cerebras">&lt; 1 sec</div>
+            <div class="cmp-val std">~8 sec</div>
+          </div>
+          <div class="cmp-bar-group">
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Cerebras</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:12%;--bar-delay:.1s"></div></div>
+            </div>
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Standard</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.3s"></div></div>
+              <span class="cmp-speedup">8× slower</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Banter response -->
+        <div class="cmp-metric">
+          <div class="cmp-metric-label">Banter response &nbsp;<span class="arrow">↓</span> lower is faster</div>
+          <div class="cmp-vals">
+            <div class="cmp-val cerebras">&lt; 800ms</div>
+            <div class="cmp-val std">~5 sec</div>
+          </div>
+          <div class="cmp-bar-group">
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Cerebras</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill c" style="--bar-w:15%;--bar-delay:.2s"></div></div>
+            </div>
+            <div class="cmp-bar-row">
+              <span class="cmp-bar-who">Standard</span>
+              <div class="cmp-bar-track"><div class="cmp-bar-fill s" style="--bar-w:95%;--bar-delay:.4s"></div></div>
+              <span class="cmp-speedup">6× slower</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmp-badge">⚡ Up to 25× faster than standard GPU inference</div>
+      </div>
     </div>
   </div>
 </section>
