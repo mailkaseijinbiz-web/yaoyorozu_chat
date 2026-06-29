@@ -123,20 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
     { code: 'ko',    flag: '🇰🇷', label: '한국어',      bcp47: 'ko-KR'  },
     { code: 'es',    flag: '🇪🇸', label: 'Español',    bcp47: 'es-ES'  },
     { code: 'fr',    flag: '🇫🇷', label: 'Français',   bcp47: 'fr-FR'  },
-    { code: 'de',    flag: '🇩🇪', label: 'Deutsch',    bcp47: 'de-DE'  },
-    { code: 'pt',    flag: '🇧🇷', label: 'Português',  bcp47: 'pt-BR'  },
-    { code: 'it',    flag: '🇮🇹', label: 'Italiano',   bcp47: 'it-IT'  },
-    { code: 'ru',    flag: '🇷🇺', label: 'Русский',    bcp47: 'ru-RU'  },
-    { code: 'ar',    flag: '🇸🇦', label: 'العربية',    bcp47: 'ar-SA'  },
-    { code: 'hi',    flag: '🇮🇳', label: 'हिन्दी',      bcp47: 'hi-IN'  },
-    { code: 'th',    flag: '🇹🇭', label: 'ไทย',        bcp47: 'th-TH'  },
-    { code: 'vi',    flag: '🇻🇳', label: 'Tiếng Việt', bcp47: 'vi-VN'  },
-    { code: 'id',    flag: '🇮🇩', label: 'Indonesia',  bcp47: 'id-ID'  },
-    { code: 'nl',    flag: '🇳🇱', label: 'Nederlands', bcp47: 'nl-NL'  },
-    { code: 'tr',    flag: '🇹🇷', label: 'Türkçe',     bcp47: 'tr-TR'  },
-    { code: 'pl',    flag: '🇵🇱', label: 'Polski',     bcp47: 'pl-PL'  },
-    { code: 'sv',    flag: '🇸🇪', label: 'Svenska',    bcp47: 'sv-SE'  },
-    { code: 'uk',    flag: '🇺🇦', label: 'Українська', bcp47: 'uk-UA'  },
   ];
   const UI_STRINGS = {
     en: {
@@ -550,6 +536,11 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast(s('toastNoCamera'), true);
       return false;
     }
+    // 既存のstreamを再利用してiOSで許可ダイアログが毎回出るのを防ぐ
+    if (mediaStream && mediaStream.active) {
+      videoElement.srcObject = mediaStream;
+      return true;
+    }
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' }
@@ -564,6 +555,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function stopCamera() {
+    // トラックは停止しない（再開時にiOSで許可ダイアログが出るため）
+    // video要素からだけ切り離す。resetTime以外では実際のトラックを保持し続ける。
+    videoElement.srcObject = null;
+  }
+
+  function releaseCamera() {
     if (mediaStream) {
       mediaStream.getTracks().forEach(t => t.stop());
       mediaStream = null;
@@ -2494,7 +2491,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     stopBanterLoop();
     stopScanning();
     teardownScene();
-    stopCamera();
+    releaseCamera();
 
     spirits.length = 0;
     visibleTargets.clear();
