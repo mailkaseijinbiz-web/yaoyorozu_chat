@@ -294,8 +294,8 @@ async function callOpenRouter({ messages, temperature }) {
     headers: {
       'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/yaorozu-chat',
-      'X-Title': 'Yaorozu Chat'
+      'HTTP-Referer': 'https://github.com/mailkaseijinbiz-web/yaoyorozu_chat',
+      'X-Title': 'Yaoyorozu Chat'
     },
     body: JSON.stringify({
       model,
