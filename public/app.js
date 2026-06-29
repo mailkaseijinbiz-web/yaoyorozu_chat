@@ -160,6 +160,10 @@ document.addEventListener('DOMContentLoaded', () => {
       toastCameraFailed: 'Failed to restart the camera. Please reload the page.',
       toastTapSpeak: '🔊 Tap the screen to hear the spirits speak',
       toastUpdate: 'Update available — tap to restart',
+      updateDialogTitle: 'Update available',
+      updateDialogMsg: 'A new version of the app is ready.',
+      updateDialogBtn: 'Update now',
+      updateDialogLater: 'Later',
       banterPauseTap: 'Tap to continue',
     },
     ja: {
@@ -197,6 +201,10 @@ document.addEventListener('DOMContentLoaded', () => {
       toastCameraFailed: 'カメラの再起動に失敗しました。ページをリロードしてください。',
       toastTapSpeak: '🔊 画面をタップして精霊の声を聞く',
       toastUpdate: '更新があります — タップして再起動',
+      updateDialogTitle: 'アップデートがあります',
+      updateDialogMsg: '新しいバージョンが利用可能です。',
+      updateDialogBtn: '今すぐ更新',
+      updateDialogLater: '後で',
       banterPauseTap: 'タップして再開',
     },
   };
@@ -2611,20 +2619,37 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
 
   // ===== Service Worker: アップデート検知 =====
   if ('serviceWorker' in navigator) {
+    const updateDialog = document.getElementById('update-dialog');
+    const updateDialogTitle = document.getElementById('update-dialog-title');
+    const updateDialogMsg = document.getElementById('update-dialog-msg');
+    const updateDialogBtn = document.getElementById('update-dialog-btn');
+    const updateDialogLater = document.getElementById('update-dialog-later');
+    let pendingUpdateWorker = null;
+
+    function showUpdateDialog(worker) {
+      pendingUpdateWorker = worker;
+      if (updateDialogTitle) updateDialogTitle.textContent = s('updateDialogTitle');
+      if (updateDialogMsg) updateDialogMsg.textContent = s('updateDialogMsg');
+      if (updateDialogBtn) updateDialogBtn.textContent = s('updateDialogBtn');
+      if (updateDialogLater) updateDialogLater.textContent = s('updateDialogLater');
+      updateDialog?.classList.remove('hidden');
+    }
+
+    updateDialogBtn?.addEventListener('click', () => {
+      updateDialog?.classList.add('hidden');
+      pendingUpdateWorker?.postMessage('SKIP_WAITING');
+    });
+    updateDialogLater?.addEventListener('click', () => {
+      updateDialog?.classList.add('hidden');
+    });
+
     navigator.serviceWorker.register('/sw.js').then(reg => {
       reg.addEventListener('updatefound', () => {
         const newWorker = reg.installing;
         newWorker.addEventListener('statechange', () => {
           // 新しいSWがインストール済みで、かつ既存SWが動いている = アップデートあり
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            showToast(s('toastUpdate'), true);
-            toastDiv.style.pointerEvents = 'auto';
-            toastDiv.style.cursor = 'pointer';
-            toastDiv.addEventListener('click', () => {
-              toastDiv.style.pointerEvents = '';
-              toastDiv.style.cursor = '';
-              newWorker.postMessage('SKIP_WAITING');
-            }, { once: true });
+            showUpdateDialog(newWorker);
           }
         });
       });
