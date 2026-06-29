@@ -1,3 +1,10 @@
+:root {
+  --edge: 12px;          /* 全辺共通の余白 */
+  --banner-h: 30px;      /* #model-banner の高さ (padding 5*2 + line-height ~20) */
+  --top-ui: calc(var(--banner-h) + var(--edge));   /* バナー下端から --edge だけ空けた位置 */
+  --bottom-ui: calc(var(--edge) + env(safe-area-inset-bottom, 0px)); /* ホームバー考慮 */
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -25,11 +32,11 @@ html, body {
 /* モバイル: app-wrapの外 → viewportに対してfixed */
 #debug-overlay {
   position: fixed;
-  top: 38px;
-  right: 12px;
+  top: var(--top-ui);
+  right: var(--edge);
   z-index: 200;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.92);
@@ -53,7 +60,7 @@ html, body {
 }
 /* bigクラスは後方互換のため維持 */
 #debug-overlay.big {
-  font-size: 15px;
+  font-size: 13px;
 }
 
 /* ===== レイヤー構成 ===== */
@@ -367,7 +374,7 @@ html, body {
 /* ===== モード切替トグル ===== */
 #mode-toggle {
   position: absolute;
-  bottom: 7%;
+  bottom: var(--bottom-ui);
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
@@ -403,15 +410,15 @@ html, body {
 /* ===== 精霊カウントボタン ===== */
 #spirit-count-btn {
   position: absolute;
-  top: 32px;
-  left: 12px;
+  top: var(--top-ui);
+  left: var(--edge);
   z-index: 25;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 6px 13px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: bold;
   color: rgba(255, 255, 255, 0.75);
   background: rgba(11, 15, 25, 0.80);
@@ -626,8 +633,8 @@ html, body {
 /* ===== リセットボタン ===== */
 #reset-btn {
   position: absolute;
-  bottom: 7%;
-  right: 16px;
+  bottom: var(--bottom-ui);
+  right: var(--edge);
   z-index: 25;
   pointer-events: auto;
   padding: 11px 18px;
@@ -651,8 +658,8 @@ html, body {
 /* ===== 設定ボタン ===== */
 #settings-btn {
   position: absolute;
-  bottom: 7%;
-  left: 16px;
+  bottom: var(--bottom-ui);
+  left: var(--edge);
   z-index: 25;
   pointer-events: auto;
   width: 44px;
@@ -803,28 +810,28 @@ html, body {
     padding: 8px 16px;
   }
 
-  /* 下部コントロール: パーセントを廃止して固定pxへ */
+  /* 下部コントロール: 横画面コンパクト用に --edge より小さい値を使用 */
   #mode-toggle {
     bottom: 6px;
   }
   #settings-btn {
     bottom: 6px;
-    left: 8px;
+    left: var(--edge);
     width: 40px;
     height: 40px;
     font-size: 18px;
   }
   #reset-btn {
     bottom: 6px;
-    right: 8px;
+    right: var(--edge);
     padding: 9px 14px;
     font-size: 12px;
   }
 
   /* 精霊カウント: バナーの下 */
   #spirit-count-btn {
-    top: 30px;
-    left: 8px;
+    top: var(--top-ui);
+    left: var(--edge);
   }
 
   /* ボトムシート: 横画面では高さを制限してスクロール可能に */
