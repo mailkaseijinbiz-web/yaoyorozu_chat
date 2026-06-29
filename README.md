@@ -1,4 +1,4 @@
-# YAOROZU CHAT
+# YAOYOROZU CHAT
 
 > **Every Object Has a Spirit Inside.**
 
