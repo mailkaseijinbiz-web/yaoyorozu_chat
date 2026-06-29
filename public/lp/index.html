@@ -393,6 +393,7 @@
     }
     .video-play:hover { transform: scale(1.08); }
     .video-caption { color: var(--muted); font-size: 14px; }
+    .video-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
 
     /* ── CTA BANNER ── */
     .cta-banner {
@@ -981,8 +982,13 @@
     <span class="section-tag">Demo</span>
     <h2 style="margin-bottom:36px;">See It in <span style="color:var(--accent2)">Action.</span></h2>
     <div class="video-wrap">
-      <div class="video-play">▶</div>
-      <p class="video-caption">Demo video coming soon — try the live app now →</p>
+      <iframe
+        src="https://www.youtube.com/embed/2xwxesu1jKQ?rel=0&modestbranding=1"
+        title="YAOYOROZU CHAT — Demo"
+        loading="lazy"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allowfullscreen></iframe>
     </div>
   </div>
 </section>
@@ -1084,7 +1090,7 @@
       <h2>Ready to Summon?</h2>
       <p>Works on any browser with a camera — iPhone, Android, desktop. No install needed.</p>
       <div class="cta-qr-row">
-        <a href="/" class="btn-primary" style="font-size:18px; padding:18px 44px;">Open the App →</a>
+        <a href="/" class="btn-primary" style="font-size:18px; padding:18px 44px;">Get Started</a>
       </div>
     </div>
   </div>
