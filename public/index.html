@@ -127,9 +127,11 @@
     </div>
 
     <canvas id="snapshot-canvas" style="display:none;"></canvas>
-    <div id="debug-overlay"></div>
 
     <script src="app.js"></script>
   </div><!-- #app-wrap -->
+
+  <!-- app-wrapのtransformに束縛されないようwrapの外に置く -->
+  <div id="debug-overlay"></div>
   </body>
 </html>
