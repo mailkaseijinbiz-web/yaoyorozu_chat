@@ -287,10 +287,10 @@
     /* 吹き出し (カップから出る) */
     .phone-bubble {
       background: #fff; border: 3px solid #ffd740;
-      border-radius: 18px; padding: 11px 16px;
+      border-radius: 18px; padding: 13px 19px;
       font-family: 'Bangers', sans-serif;
-      font-size: 16px; line-height: 1.15;
-      max-width: 200px; text-align: center; color: #111;
+      font-size: 21px; line-height: 1.12;
+      max-width: 236px; text-align: center; color: #111;
       box-shadow: 0 8px 22px rgba(0,0,0,.45);
       position: absolute; left: 50%; bottom: 56%; z-index: 5;
       transform: translateX(-50%) scale(0);
@@ -576,11 +576,15 @@
       padding: 2px 7px; border-radius: 100px; flex-shrink: 0; white-space: nowrap;
     }
     .cmp-badge {
-      margin-top: 22px; padding: 13px 16px;
+      margin-top: 22px; padding: 14px 16px;
       background: rgba(255,122,26,.1);
       border: 1px solid rgba(255,122,26,.45); border-radius: 12px;
-      text-align: center; font-weight: 700; font-size: 14px; color: #fff;
+      text-align: center; font-weight: 700; font-size: 15px; color: #fff;
       box-shadow: 0 0 24px rgba(255,122,26,.12);
+    }
+    .cmp-badge-num {
+      font-size: 1.6em; font-weight: 800; color: #ff9d3d;
+      letter-spacing: .5px; vertical-align: -2px; margin: 0 1px;
     }
     .cmp-note {
       margin-top: 12px; text-align: center;
@@ -588,23 +592,32 @@
     }
     .cmp-note strong { color: rgba(255,255,255,.7); font-weight: 700; }
 
-    /* ── USE CASES ── */
-    .usecase-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 20px;
+    /* ── USE CASES (カルーセル) ── */
+    .usecase-grid { overflow: hidden; position: relative; padding: 6px 0 10px; }
+    .uc-track {
+      display: flex; gap: 22px;
+      transition: transform .55s cubic-bezier(.4, 0, .2, 1);
+      will-change: transform;
     }
     .uc-card {
+      flex: 0 0 auto; width: min(640px, 86vw);
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: var(--radius);
       overflow: hidden;
-      transition: border-color .25s, transform .2s;
+      transition: border-color .25s, box-shadow .25s;
     }
-    .uc-card:hover { border-color: rgba(124,77,255,.4); transform: translateY(-3px); }
+    .uc-card:hover { border-color: rgba(124,77,255,.4); box-shadow: 0 20px 50px rgba(0,0,0,.4); }
+    .uc-dots { display: flex; justify-content: center; gap: 9px; margin-top: 28px; }
+    .uc-dot {
+      width: 8px; height: 8px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+      background: rgba(255,255,255,.22); transition: background .25s, transform .25s, width .25s;
+    }
+    .uc-dot.active { background: var(--accent1); width: 22px; border-radius: 100px; }
 
     /* Photo area */
     .uc-img-wrap {
-      position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden;
+      position: relative; width: 100%; aspect-ratio: 16/10; overflow: hidden;
       background: linear-gradient(135deg, #1a1f35, #0d1222);
     }
     .uc-img {
@@ -626,8 +639,8 @@
       padding: 5px 10px 5px 8px; border-radius: 100px;
       border: 1px solid rgba(255,255,255,.12);
     }
-    .uc-icon { font-size: 16px; line-height: 1; }
-    .uc-scene-name { font-weight: 700; font-size: 12px; color: #fff; }
+    .uc-icon { font-size: 18px; line-height: 1; }
+    .uc-scene-name { font-weight: 700; font-size: 14px; color: #fff; }
     .uc-scene-sub { font-size: 9px; color: rgba(255,255,255,.55); }
 
     /* Placeholder */
@@ -651,11 +664,11 @@
       background: rgba(255,255,255,.93);
       backdrop-filter: blur(4px);
       border-radius: 10px;
-      padding: 6px 10px; color: #111;
+      padding: 7px 12px; color: #111;
       font-family: 'Bangers', sans-serif;
-      font-size: 15px; line-height: 1.25;
+      font-size: 17px; line-height: 1.25;
       display: inline-block;
-      max-width: 82%; align-self: flex-start;
+      max-width: 80%; align-self: flex-start;
       box-shadow: 0 2px 8px rgba(0,0,0,.35);
     }
     .uc-bubble.right { align-self: flex-end; }
@@ -784,14 +797,14 @@
   <span class="nav-logo">YAOYOROZU CHAT</span>
   <div class="nav-right">
     <select id="lang-switcher" class="lang-switcher" aria-label="Language">
-      <option value="en">EN</option>
-      <option value="ja">日本語</option>
-      <option value="ko">한국어</option>
-      <option value="zh">中文</option>
-      <option value="es">Español</option>
-      <option value="fr">Français</option>
-      <option value="de">Deutsch</option>
-      <option value="pt">Português</option>
+      <option value="en">🇺🇸 EN</option>
+      <option value="ja">🇯🇵 日本語</option>
+      <option value="ko">🇰🇷 한국어</option>
+      <option value="zh">🇨🇳 中文</option>
+      <option value="es">🇪🇸 Español</option>
+      <option value="fr">🇫🇷 Français</option>
+      <option value="de">🇩🇪 Deutsch</option>
+      <option value="pt">🇧🇷 Português</option>
     </select>
     <a href="/" class="nav-cta">Get Started</a>
   </div>
@@ -871,6 +884,7 @@
     <p class="section-sub">Spirits take on personalities shaped by what they are — and where you find them.</p>
 
     <div class="usecase-grid">
+      <div class="uc-track">
 
       <div class="uc-card">
         <div class="uc-img-wrap">
@@ -968,7 +982,9 @@
         </div>
       </div>
 
+      </div>
     </div>
+    <div class="uc-dots" id="uc-dots"></div>
   </div>
 </section>
 
@@ -1173,6 +1189,50 @@
     }, { threshold: 0.25 });
     cmpObs.observe(cmpCard);
   }
+
+  // ===== ユースケース・カルーセル (transform方式) =====
+  (function () {
+    const viewport = document.querySelector('.usecase-grid');
+    const inner = document.querySelector('.uc-track');
+    const dotsWrap = document.getElementById('uc-dots');
+    if (!viewport || !inner || !dotsWrap) return;
+    const cards = Array.from(inner.querySelectorAll('.uc-card'));
+    if (cards.length < 2) return;
+    let cur = 0, paused = false, timer = null, resumeT = null;
+    cards.forEach((c, i) => {
+      const d = document.createElement('button');
+      d.className = 'uc-dot'; d.setAttribute('aria-label', 'Scene ' + (i + 1));
+      d.addEventListener('click', () => { goTo(i); bump(); });
+      dotsWrap.appendChild(d);
+    });
+    const dots = Array.from(dotsWrap.children);
+    function setActive(i) { dots.forEach((d, j) => d.classList.toggle('active', j === i)); }
+    function goTo(i) {
+      cur = (i + cards.length) % cards.length;
+      const c = cards[cur];
+      const maxOffset = Math.max(0, inner.scrollWidth - viewport.clientWidth);
+      let offset = c.offsetLeft - (viewport.clientWidth - c.offsetWidth) / 2;
+      offset = Math.min(Math.max(0, offset), maxOffset);
+      inner.style.transform = 'translateX(' + (-offset) + 'px)';
+      setActive(cur);
+    }
+    function start() { stop(); timer = setInterval(() => { if (!paused) goTo(cur + 1); }, 4500); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function bump() { paused = true; clearTimeout(resumeT); resumeT = setTimeout(() => { paused = false; }, 9000); }
+    window.addEventListener('resize', () => goTo(cur));
+    goTo(0); start();
+    // スワイプ
+    let x0 = null;
+    viewport.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; paused = true; }, { passive: true });
+    viewport.addEventListener('touchend', (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 40) goTo(cur + (dx < 0 ? 1 : -1));
+      x0 = null; bump();
+    });
+    viewport.addEventListener('mouseenter', () => { paused = true; });
+    viewport.addEventListener('mouseleave', () => { paused = false; });
+  })();
 </script>
 
 <!-- ===== i18n: 地域(ブラウザ言語)で自動最適化 ===== -->
@@ -1181,6 +1241,10 @@
   (function () {
     const SUPPORTED = ['en', 'ja', 'ko', 'zh', 'es', 'fr', 'de', 'pt'];
     function detect() {
+      try {
+        const q = new URL(location.href).searchParams.get('lang');
+        if (q && SUPPORTED.includes(q)) return q;
+      } catch (e) {}
       const saved = localStorage.getItem('lp_lang');
       if (saved && SUPPORTED.includes(saved)) return saved;
       const langs = (navigator.languages && navigator.languages.length)
@@ -1206,6 +1270,21 @@
           try { const el = document.querySelector(sel); if (el) el.innerHTML = dict[sel]; } catch (e) {}
         }
       }
+      // 比較バッジの「7×」を強調
+      try {
+        const badge = document.querySelector('.cmp-badge');
+        if (badge && !/cmp-badge-num/.test(badge.innerHTML)) {
+          badge.innerHTML = badge.innerHTML.replace(/(7[×x])/, '<span class="cmp-badge-num">$1</span>');
+        }
+      } catch (e) {}
+      // 言語ごとにURLを変える(?lang=xx を反映)
+      try {
+        const u = new URL(location.href);
+        if (u.searchParams.get('lang') !== lang) {
+          u.searchParams.set('lang', lang);
+          history.replaceState(null, '', u.toString());
+        }
+      } catch (e) {}
       const sw = document.getElementById('lang-switcher');
       if (sw) sw.value = lang;
     }
@@ -1213,7 +1292,11 @@
     const sw = document.getElementById('lang-switcher');
     if (sw) sw.addEventListener('change', function () {
       localStorage.setItem('lp_lang', sw.value);
-      location.reload();
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set('lang', sw.value);
+        location.href = u.toString();
+      } catch (e) { location.reload(); }
     });
   })();
 </script>
