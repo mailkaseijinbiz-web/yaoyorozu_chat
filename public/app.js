@@ -1431,8 +1431,6 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
       stopCamera();
       videoElement.classList.add('hidden-feed');
       teardownScene();
-    } else {
-      showToast(newcomerName ? s('toastSummoning', newcomerName) : s('toastUpdatingAR'));
     }
 
     try {
@@ -1796,6 +1794,7 @@ self.onmessage = async ({ data: { id, images, prevBuffer } }) => {
     isRequestPending = false;
     lastScanMs = null; scanReqStart = null; lastBanterMs = null; banterReqStart = null;
     scanSamples.length = 0; banterSamples.length = 0;
+    spirits.forEach((_, i) => hideSpeechBubble(i));
     updateModelUI();
   }
 
